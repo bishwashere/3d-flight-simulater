@@ -1,26 +1,55 @@
-:root {
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", sans-serif;
-  color: #f3f8f8;
-  background: #071014;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+@import "tailwindcss";
 
-* {
-  box-sizing: border-box;
-}
+@theme {
+  --font-display: "Google Sans Flex Variable", "Google Sans", ui-sans-serif,
+    system-ui, sans-serif;
+  --font-body: "Google Sans Flex Variable", "Google Sans", ui-sans-serif,
+    system-ui, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 
-html,
-body,
-#root {
-  min-width: 320px;
-  min-height: 100%;
-  margin: 0;
-}
+  --color-flight-950: #050d12;
+  --color-flight-900: #08151c;
+  --color-flight-850: #0b1c24;
+  --color-flight-800: #102832;
+  --color-flight-700: #1c3b45;
+  --color-flight-500: #4e7279;
+  --color-flight-300: #91adb0;
+  --color-flight-100: #e8f4f3;
+  --color-hud: #58e6df;
+  --color-hud-bright: #a3fff9;
+  --color-amber: #f4b75c;
+  --color-critical: #ff665f;
+  --color-ready: #8ce99a;
 
-body {
-  min-height: 100svh;
+  --shadow-hud: 0 0 24px rgb(88 230 223 / 0.2);
+  --shadow-panel: 0 28px 90px rgb(0 0 0 / 0.45);
+
+  --animate-radar: radar-sweep 3.8s linear infinite;
+  --animate-float: aircraft-float 6s ease-in-out infinite;
+  --animate-drift: water-drift 12s ease-in-out infinite alternate;
+
+  @keyframes radar-sweep {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes aircraft-float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-7px);
+    }
+  }
+
+  @keyframes water-drift {
+    from {
+      transform: translateX(-0.5%);
+    }
+    to {
+      transform: translateX(0.5%);
+    }
+  }
 }
