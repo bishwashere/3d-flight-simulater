@@ -1,0 +1,27 @@
+.app-shell {
+  display: grid;
+  min-height: 100svh;
+  place-content: center;
+  padding: 2rem;
+  text-align: center;
+}
+
+.eyebrow {
+  margin: 0 0 0.75rem;
+  color: #47e8e0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}
+
+.app-shell h1 {
+  margin: 0;
+  color: #f3f8f8;
+  font-size: clamp(2rem, 6vw, 4rem);
+  line-height: 1;
+}
+
+.status {
+  margin: 1rem 0 0;
+  color: #8fa6aa;
+}
