@@ -2,6 +2,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   getMenuPanelFromPath,
   HOME_PATH,
+  LEVEL_ONE_PATH,
   PANEL_PATHS,
 } from '../../config/menu-routes'
 import { useMenuAudio } from '../../hooks/use-menu-audio'
@@ -20,7 +21,7 @@ export function HomeScreen() {
   const activePanel = getMenuPanelFromPath(location.pathname)
 
   const openPanel = (panel: MenuPanelId) => {
-    audio.play(panel === 'preflight' ? 'confirm' : 'click')
+    audio.play(panel === 'levels' ? 'confirm' : 'click')
     void navigate(PANEL_PATHS[panel])
   }
 
@@ -56,6 +57,7 @@ export function HomeScreen() {
         activePanel={activePanel}
         audio={audio}
         onClose={closePanel}
+        onLaunchLevel={() => void navigate(LEVEL_ONE_PATH)}
       />
       <Outlet />
     </main>

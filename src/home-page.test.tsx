@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { AppRoutes } from './app-router'
@@ -32,20 +32,19 @@ describe('home menu', () => {
     ).toBeEnabled()
   })
 
-  it('opens and stages the free-flight flow', () => {
+  it('opens level selection with only level one available', () => {
     renderLauncher()
 
     fireEvent.click(screen.getByRole('button', { name: /start game/i }))
 
     expect(
-      screen.getByRole('dialog', { name: 'Preflight staging' }),
+      screen.getByRole('dialog', { name: 'Select level' }),
     ).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Stage free flight' }))
-
     expect(
-      screen.getByRole('status', { name: 'Flight status' }),
-    ).toHaveTextContent('Flight flow staged')
+      screen.getByRole('button', { name: /open map/i }),
+    ).toBeEnabled()
+    expect(screen.getByRole('button', { name: /level 2/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /level 3/i })).toBeDisabled()
   })
 
   it('updates sound settings and closes panels with Escape', () => {
@@ -62,9 +61,20 @@ describe('home menu', () => {
     expect(soundToggle).toHaveAttribute('aria-checked', 'false')
     expect(useSettingsStore.getState().uiSoundsEnabled).toBe(false)
 
-    const volume = screen.getByLabelText('Interface volume')
+    const settingsDialog = screen.getByRole('dialog', { name: 'Settings' })
+    const volume = within(settingsDialog).getByLabelText('Master volume')
     fireEvent.change(volume, { target: { value: '42' } })
     expect(useSettingsStore.getState().masterVolume).toBe(0.42)
+
+    const musicToggle = screen.getByRole('switch', { name: 'Music' })
+    fireEvent.click(musicToggle)
+    expect(useSettingsStore.getState().musicEnabled).toBe(false)
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Shadows' }))
+    expect(useSettingsStore.getState()).toMatchObject({
+      qualityPreset: 'custom',
+      shadowsEnabled: false,
+    })
 
     fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()

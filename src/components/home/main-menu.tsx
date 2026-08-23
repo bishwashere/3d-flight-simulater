@@ -12,7 +12,7 @@ const MENU_ITEMS = [
   {
     icon: Play,
     label: 'Start game',
-    panel: 'preflight',
+    panel: 'levels',
     primary: true,
   },
   {

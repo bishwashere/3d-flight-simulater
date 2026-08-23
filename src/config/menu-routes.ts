@@ -1,11 +1,12 @@
 import type { MenuPanelId } from '../types/menu'
 
 export const HOME_PATH = '/'
+export const LEVEL_ONE_PATH = '/game/level-1'
 
 export const PANEL_PATHS: Readonly<Record<MenuPanelId, string>> = {
   controls: '/controls',
   credits: '/credits',
-  preflight: '/play',
+  levels: '/play',
   settings: '/settings',
 }
 

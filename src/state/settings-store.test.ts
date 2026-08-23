@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_SETTINGS,
+  PERFORMANCE_PRESETS,
   SETTINGS_STORAGE_KEY,
   settingsSchema,
   useSettingsStore,
@@ -33,6 +34,33 @@ describe('settings store', () => {
     expect(useSettingsStore.getState().masterVolume).toBe(0)
   })
 
+  it('applies presets and marks manual performance tuning as custom', () => {
+    const settings = useSettingsStore.getState()
+
+    settings.setQualityPreset('low')
+    expect(useSettingsStore.getState()).toMatchObject({
+      ...PERFORMANCE_PRESETS.low,
+      qualityPreset: 'low',
+    })
+
+    useSettingsStore.getState().setRenderDistance(9999)
+    useSettingsStore.getState().setRenderScale(0.1)
+    useSettingsStore.getState().setVegetationDensity(-1)
+
+    expect(useSettingsStore.getState()).toMatchObject({
+      qualityPreset: 'custom',
+      renderDistance: 3200,
+      renderScale: 0.5,
+      vegetationDensity: 0,
+    })
+
+    useSettingsStore.getState().setQualityPreset('medium')
+    expect(useSettingsStore.getState()).toMatchObject({
+      ...PERFORMANCE_PRESETS.medium,
+      qualityPreset: 'medium',
+    })
+  })
+
   it('persists only serializable settings', () => {
     useSettingsStore.getState().setMasterVolume(0.42)
     useSettingsStore.getState().setUiSoundsEnabled(false)
@@ -43,7 +71,11 @@ describe('settings store', () => {
 
     expect(persisted.state).toMatchObject({
       masterVolume: 0.42,
+      renderDistance: DEFAULT_SETTINGS.renderDistance,
+      renderScale: DEFAULT_SETTINGS.renderScale,
+      shadowsEnabled: DEFAULT_SETTINGS.shadowsEnabled,
       uiSoundsEnabled: false,
+      vegetationDensity: DEFAULT_SETTINGS.vegetationDensity,
     })
     expect(persisted.state?.setMasterVolume).toBeUndefined()
   })
@@ -51,18 +83,28 @@ describe('settings store', () => {
   it('normalizes settings through the reusable schema', () => {
     expect(
       settingsSchema.parse({
+        adaptiveResolutionEnabled: false,
         masterVolume: 1.75,
         musicEnabled: false,
         pointerYokeEnabled: true,
         qualityPreset: 'medium',
+        renderDistance: 9999,
+        renderScale: 0.25,
+        shadowsEnabled: false,
         uiSoundsEnabled: false,
+        vegetationDensity: -1,
       }),
     ).toEqual({
+      adaptiveResolutionEnabled: false,
       masterVolume: 1,
       musicEnabled: false,
       pointerYokeEnabled: true,
       qualityPreset: 'medium',
+      renderDistance: 3200,
+      renderScale: 0.5,
+      shadowsEnabled: false,
       uiSoundsEnabled: false,
+      vegetationDensity: 0,
     })
 
     expect(settingsSchema.parse(null)).toEqual(DEFAULT_SETTINGS)
@@ -73,11 +115,16 @@ describe('settings store', () => {
       SETTINGS_STORAGE_KEY,
       JSON.stringify({
         state: {
+          adaptiveResolutionEnabled: false,
           masterVolume: -2,
           musicEnabled: 'yes',
           pointerYokeEnabled: true,
           qualityPreset: 'ultra',
+          renderDistance: 1200,
+          renderScale: 0.8,
+          shadowsEnabled: 'yes',
           uiSoundsEnabled: false,
+          vegetationDensity: 0.45,
         },
         version: 1,
       }),
@@ -86,11 +133,16 @@ describe('settings store', () => {
     await useSettingsStore.persist.rehydrate()
 
     expect(useSettingsStore.getState()).toMatchObject({
+      adaptiveResolutionEnabled: false,
       masterVolume: 0,
       musicEnabled: DEFAULT_SETTINGS.musicEnabled,
       pointerYokeEnabled: true,
       qualityPreset: DEFAULT_SETTINGS.qualityPreset,
+      renderDistance: 1200,
+      renderScale: 0.8,
+      shadowsEnabled: DEFAULT_SETTINGS.shadowsEnabled,
       uiSoundsEnabled: false,
+      vegetationDensity: 0.45,
     })
   })
 

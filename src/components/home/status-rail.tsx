@@ -32,7 +32,7 @@ export function StatusRail({ audio, onOpenCredits }: StatusRailProps) {
           <VolumeSlider
             className="w-[clamp(5.5rem,12vw,9rem)]"
             id="master-volume"
-            label="Interface sound volume"
+            label="Master volume"
             value={audio.volume}
             onChange={audio.setVolume}
             showValue={false}
