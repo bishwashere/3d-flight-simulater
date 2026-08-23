@@ -26,6 +26,7 @@ export interface LevelOneAudio {
   dispose(): void
   pause(): Promise<void>
   playCheckpoint(): void
+  playCoin(): void
   playCrash(): void
   playSuccess(): void
   reset(): void
@@ -216,6 +217,14 @@ export class ProceduralLevelOneAudio implements LevelOneAudio {
       const start = context.currentTime
       this.playTone(context, 740, start, 0.13, 0.105, 'sine')
       this.playTone(context, 1110, start + 0.09, 0.22, 0.09, 'sine')
+    })
+  }
+
+  playCoin() {
+    this.scheduleWhenAudible((context) => {
+      const start = context.currentTime
+      this.playTone(context, 987.77, start, 0.09, 0.075, 'sine')
+      this.playTone(context, 1318.51, start + 0.045, 0.16, 0.065, 'triangle')
     })
   }
 

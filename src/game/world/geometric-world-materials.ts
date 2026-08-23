@@ -12,6 +12,7 @@ export interface GeometricWorldMaterials {
   checkpointActive: StandardMaterial
   checkpointCollected: StandardMaterial
   checkpointPending: StandardMaterial
+  coinGold: StandardMaterial
   cloud: StandardMaterial
   concrete: StandardMaterial
   darkMetal: StandardMaterial
@@ -101,6 +102,11 @@ export function createGeometricWorldMaterials(
       alpha: 0.68,
       diffuse: new Color3(1, 0.61, 0.08),
       emissive: new Color3(0.2, 0.06, 0.005),
+    }),
+    coinGold: createMaterial(scene, 'material-coin-gold', {
+      diffuse: new Color3(1, 0.72, 0.055),
+      emissive: new Color3(0.3, 0.11, 0.004),
+      specular: new Color3(0.88, 0.68, 0.18),
     }),
     cloud: createMaterial(scene, 'material-cloud', {
       alpha: 0.82,

@@ -14,6 +14,8 @@ describe('LevelOneCourse', () => {
 
     expect(
       course.update({
+        airborne: false,
+        deltaSeconds: 0,
         insideLandingZone: true,
         onGround: true,
         position: { x: 0, y: 0, z: 0 },
@@ -24,6 +26,8 @@ describe('LevelOneCourse', () => {
 
     expect(
       course.update({
+        airborne: true,
+        deltaSeconds: 0,
         insideLandingZone: false,
         onGround: false,
         position: checkpoints[0].position,
@@ -33,6 +37,8 @@ describe('LevelOneCourse', () => {
     ).toBe('checkpoint')
     expect(
       course.update({
+        airborne: true,
+        deltaSeconds: 0,
         insideLandingZone: false,
         onGround: false,
         position: checkpoints[1].position,
@@ -42,6 +48,8 @@ describe('LevelOneCourse', () => {
     ).toBe('checkpoint')
 
     const result = course.update({
+      airborne: false,
+      deltaSeconds: 0,
       insideLandingZone: true,
       onGround: true,
       position: { x: 0, y: 0, z: 0 },
@@ -56,6 +64,8 @@ describe('LevelOneCourse', () => {
     const course = new LevelOneCourse(checkpoints)
     course.start()
     course.update({
+      airborne: true,
+      deltaSeconds: 3,
       insideLandingZone: false,
       onGround: false,
       position: checkpoints[0].position,
@@ -69,8 +79,99 @@ describe('LevelOneCourse', () => {
 
     expect(course.getSnapshot({ x: 0, y: 0, z: 0 })).toMatchObject({
       checkpointIndex: 0,
+      coinsCollected: 0,
       phase: 'ready',
       score: 0,
     })
+  })
+
+  it('awards one point for each three accumulated airborne seconds', () => {
+    const course = new LevelOneCourse(checkpoints)
+    course.start()
+
+    const update = (airborne: boolean, deltaSeconds: number) =>
+      course.update({
+        airborne,
+        deltaSeconds,
+        insideLandingZone: false,
+        onGround: !airborne,
+        position: { x: 0, y: airborne ? 20 : 0, z: 0 },
+        speed: airborne ? 45 : 0,
+        verticalSpeed: 0,
+      })
+
+    update(true, 2.99)
+    expect(course.getSnapshot({ x: 0, y: 0, z: 0 })).toMatchObject({
+      airborneSeconds: 2.99,
+      airtimeScore: 0,
+      score: 0,
+    })
+
+    update(false, 20)
+    update(true, 0.01)
+    for (let step = 0; step < 720; step += 1) {
+      update(true, 1 / 120)
+    }
+
+    const snapshot = course.getSnapshot({ x: 0, y: 0, z: 0 })
+    expect(snapshot.airborneSeconds).toBeCloseTo(9)
+    expect(snapshot).toMatchObject({
+      airtimeScore: 3,
+      score: 3,
+    })
+  })
+
+  it('collects each coin ID once and reports coin scoring stats', () => {
+    const course = new LevelOneCourse(checkpoints)
+
+    expect(course.collectCoin('coin-a')).toBeUndefined()
+    course.start()
+
+    expect(course.collectCoin('coin-a')).toEqual({
+      coinId: 'coin-a',
+      points: 25,
+      score: 25,
+      type: 'coin',
+    })
+    expect(course.collectCoin(' coin-a ')).toBeUndefined()
+    expect(course.collectCoin('coin-b', 50)).toEqual({
+      coinId: 'coin-b',
+      points: 50,
+      score: 75,
+      type: 'coin',
+    })
+    expect(course.getSnapshot({ x: 0, y: 0, z: 0 })).toMatchObject({
+      coinScore: 75,
+      coinsCollected: 2,
+      score: 75,
+    })
+  })
+
+  it('clears collected coin IDs and all scoring counters on reset', () => {
+    const course = new LevelOneCourse(checkpoints)
+    course.start()
+    course.collectCoin('coin-a')
+    course.update({
+      airborne: true,
+      deltaSeconds: 3,
+      insideLandingZone: false,
+      onGround: false,
+      position: { x: 0, y: 20, z: 0 },
+      speed: 45,
+      verticalSpeed: 0,
+    })
+
+    course.reset()
+    expect(course.getSnapshot({ x: 0, y: 0, z: 0 })).toMatchObject({
+      airborneSeconds: 0,
+      airtimeScore: 0,
+      coinScore: 0,
+      coinsCollected: 0,
+      phase: 'ready',
+      score: 0,
+    })
+
+    course.start()
+    expect(course.collectCoin('coin-a')?.type).toBe('coin')
   })
 })

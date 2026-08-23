@@ -20,6 +20,13 @@ const HUD_DIM = '#6fd3c5'
 const AMBER = '#ffc66d'
 const RED = '#ff665f'
 
+function formatFlightTime(totalSeconds: number): string {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds))
+  const minutes = Math.floor(safeSeconds / 60)
+  const seconds = safeSeconds % 60
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`
+}
+
 function createText(
   name: string,
   text: string,
@@ -193,7 +200,7 @@ export function createLevelOneHud(
   texture.addControl(cameraLabel)
 
   const progress = createText('checkpoint-progress', '', 15)
-  progress.width = '360px'
+  progress.width = '680px'
   progress.height = '28px'
   progress.left = '28px'
   progress.top = '-22px'
@@ -206,7 +213,7 @@ export function createLevelOneHud(
     secondaryData.text = `${telemetry.backend.toUpperCase()}  ·  ${telemetry.fps.toFixed(0)} FPS  ·  ${Math.round(telemetry.renderScale * 100)}%`
     objectiveText.text = `${telemetry.objective}  ${telemetry.checkpointDistance > 1 ? `// ${telemetry.checkpointDistance.toFixed(0)} m` : ''}`
     statusText.text = `ENGINE   ${telemetry.engineRunning ? 'ON' : 'OFF'}\nTHROTTLE  ${Math.round(telemetry.throttle * 100).toString().padStart(3, '0')}%\nGEAR      DOWN\nDAMAGE    ${Math.round(telemetry.damage).toString().padStart(3, '0')}%`
-    progress.text = `SCORE  ${telemetry.score.toString().padStart(4, '0')}     RINGS  ${telemetry.checkpointIndex}/${telemetry.checkpointCount}`
+    progress.text = `SCORE  ${telemetry.score.toString().padStart(4, '0')}     AIR  ${formatFlightTime(telemetry.airborneSeconds)}     COINS  ${telemetry.coinsCollected}/${telemetry.coinCount}     RINGS  ${telemetry.checkpointIndex}/${telemetry.checkpointCount}`
     cameraLabel.text = `${telemetry.cameraMode.toUpperCase()} CAM  //  C TO SWITCH`
 
     horizon.rotation = (-telemetry.roll * Math.PI) / 180

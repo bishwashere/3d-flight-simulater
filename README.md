@@ -12,8 +12,8 @@ landing.
 - Fixed-step 120 Hz aircraft simulation, independent from React rendering
 - Ground roll, throttle, lift, drag, stalls, steering, braking, and crash checks
 - Cockpit and chase cameras
-- Ordered checkpoint scoring, destination guidance, landing validation, crash
-  reset, and level completion
+- Optional collectible coins, slow airborne-time scoring, ordered checkpoint
+  rewards, landing validation, crash reset, and level completion
 - Babylon GUI flight HUD with live aircraft and course telemetry
 - Procedural engine, wind, checkpoint, crash/fire, and success audio generated
   with the Web Audio API
@@ -42,6 +42,10 @@ Fly through every ring in order. After the final checkpoint, follow the runway
 guidance, touch down gently inside the marked landing zone, and slow to complete
 the level. A hard impact or obstacle collision crashes the aircraft; reset to
 retry cleanly.
+
+Coins are optional exploration rewards worth 25 points each. While genuinely
+airborne, the aircraft also earns one point every three seconds. Airtime pauses
+on the ground, while paused, and after a crash; resetting clears the full score.
 
 ## Commands
 

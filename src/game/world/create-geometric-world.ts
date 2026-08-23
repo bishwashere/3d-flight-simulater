@@ -9,6 +9,7 @@ import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 
 import { createCrashEffects } from './create-crash-effects'
+import { createGeometricCoins } from './create-geometric-coins'
 import {
   GEOMETRIC_AIRCRAFT_GROUND_CLEARANCE,
   createGeometricAircraft,
@@ -861,6 +862,7 @@ export function createGeometricWorld(
   )
   const balloons = createGeometricBalloons(context)
   const checkpoints = createGeometricCheckpoints(context)
+  const coins = createGeometricCoins(context)
   const cloudLayer = createGeometricClouds(context, quality)
   const aircraft = createGeometricAircraft(scene, materials, options.shadowGenerator)
   aircraft.root.parent = root
@@ -889,6 +891,7 @@ export function createGeometricWorld(
       minimumZ: -1_350,
     },
     checkpoints,
+    coins,
     landingZone: {
       center: new Vector3(RUNWAY_X, runwayElevation, RUNWAY_CENTER_Z),
       elevation: runwayElevation,
@@ -915,6 +918,11 @@ export function createGeometricWorld(
         material.dispose()
       }
     },
+    resetCoins(): void {
+      for (const coin of coins) {
+        coin.reset()
+      }
+    },
     showCrashEffects(position, velocity): void {
       aircraft.setCrashState(true)
       crashEffects.show(position, velocity)
@@ -924,6 +932,9 @@ export function createGeometricWorld(
       const delta = Math.min(Math.max(deltaSeconds, 0), 0.1)
       for (const checkpoint of checkpoints) {
         checkpoint.update(elapsedSeconds)
+      }
+      for (const coin of coins) {
+        coin.update(elapsedSeconds)
       }
       for (const balloon of balloons) {
         balloon.root.position.y =
@@ -950,6 +961,7 @@ export type {
   GeometricAircraftVisual,
   GeometricCheckpoint,
   GeometricCheckpointState,
+  GeometricCoin,
   GeometricLandingZone,
   GeometricObstacleCollider,
   GeometricObstacleKind,

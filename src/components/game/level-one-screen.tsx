@@ -175,6 +175,9 @@ export function LevelOneScreen({
             canvas.dataset.fps = telemetry.fps.toFixed(0)
             canvas.dataset.phase = telemetry.phase
             canvas.dataset.score = telemetry.score.toFixed(0)
+            canvas.dataset.airborneSeconds = telemetry.airborneSeconds.toFixed(1)
+            canvas.dataset.coinsCollected = telemetry.coinsCollected.toString()
+            canvas.dataset.coinCount = telemetry.coinCount.toString()
             canvas.dataset.speed = telemetry.speed.toFixed(1)
           },
           performance: resolvedPerformance,

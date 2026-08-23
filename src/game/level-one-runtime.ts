@@ -187,6 +187,7 @@ export class LevelOneRuntime {
         ...EMPTY_LEVEL_ONE_TELEMETRY,
         backend,
         checkpointCount: world.checkpoints.length,
+        coinCount: world.coins.length,
         meshCount: world.scene.meshes.length,
       }
       const hud = createLevelOneHud(world.scene, initialTelemetry)
@@ -276,7 +277,8 @@ export class LevelOneRuntime {
     const input = this.resolveSimulationInput()
     const interpolationAlpha = this.simulation.advance(deltaSeconds, input)
     this.checkWorldCollisions()
-    this.processCourse()
+    this.processCourse(deltaSeconds)
+    this.processCoinCollection()
     this.processCrash()
 
     const renderState = this.simulation.getInterpolatedState(interpolationAlpha)
@@ -375,9 +377,11 @@ export class LevelOneRuntime {
     }
   }
 
-  private processCourse(): void {
+  private processCourse(deltaSeconds: number): void {
     const state = this.simulation.state
     const event = this.course.update({
+      airborne: !state.onGround,
+      deltaSeconds,
       insideLandingZone: this.isInsideLandingZone(state.position),
       onGround: state.onGround,
       position: state.position,
@@ -392,11 +396,42 @@ export class LevelOneRuntime {
     if (event.type === 'checkpoint') {
       this.audio.playCheckpoint()
       this.updateCheckpointVisuals()
-    } else {
+    } else if (event.type === 'complete') {
       this.simulation.setThrottle(0)
       this.audio.playSuccess()
     }
     this.emitGameStatus(true)
+  }
+
+  private processCoinCollection(): void {
+    const state = this.simulation.state
+    if (state.crashed) {
+      return
+    }
+
+    for (const coin of this.world.coins) {
+      if (coin.collected) {
+        continue
+      }
+
+      const collectionRadius =
+        coin.radius + GEOMETRIC_AIRCRAFT_COLLISION_RADIUS
+      if (
+        Vector3.DistanceSquared(state.position, coin.root.position) >
+        collectionRadius ** 2
+      ) {
+        continue
+      }
+
+      const event = this.course.collectCoin(coin.id, coin.value)
+      if (!event || !coin.collect()) {
+        continue
+      }
+
+      this.audio.playCoin()
+      this.emitGameStatus(true)
+      return
+    }
   }
 
   private processCrash(): void {
@@ -533,16 +568,21 @@ export class LevelOneRuntime {
       state.position.z,
     )
     const telemetry: LevelOneTelemetry = {
+      airborneSeconds: course.airborneSeconds,
       altitude: Math.max(
         0,
         state.position.y - terrainHeight - GEOMETRIC_AIRCRAFT_GROUND_CLEARANCE,
       ),
       angleOfAttack: state.angleOfAttack,
+      airtimeScore: course.airtimeScore,
       backend: this.backend,
       cameraMode: this.cameraMode,
       checkpointCount: course.checkpointCount,
       checkpointDistance: course.checkpointDistance,
       checkpointIndex: course.checkpointIndex,
+      coinCount: this.world.coins.length,
+      coinScore: course.coinScore,
+      coinsCollected: course.coinsCollected,
       damage: state.damage,
       engineRunning: state.engineRunning,
       fps: this.engine.getFps(),
@@ -565,6 +605,10 @@ export class LevelOneRuntime {
     this.canvas.dataset.positionX = state.position.x.toFixed(2)
     this.canvas.dataset.positionY = state.position.y.toFixed(2)
     this.canvas.dataset.positionZ = state.position.z.toFixed(2)
+    this.canvas.dataset.airborneSeconds = course.airborneSeconds.toFixed(1)
+    this.canvas.dataset.coinCount = this.world.coins.length.toString()
+    this.canvas.dataset.coinsCollected = course.coinsCollected.toString()
+    this.canvas.dataset.score = course.score.toString()
     this.hud.update(telemetry)
     this.onTelemetry?.(telemetry)
   }
@@ -650,6 +694,7 @@ export class LevelOneRuntime {
     this.pointerRoll = 0
     this.cameraMode = 'chase'
     this.world.clearCrashEffects()
+    this.world.resetCoins()
     this.world.aircraft.setCrashState(false)
     this.setAircraftVisibility(true)
     this.audio.reset()

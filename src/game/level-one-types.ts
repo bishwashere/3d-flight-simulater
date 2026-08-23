@@ -42,13 +42,18 @@ export interface LevelOneControlInput {
 }
 
 export interface LevelOneTelemetry {
+  airborneSeconds: number
   altitude: number
   angleOfAttack: number
+  airtimeScore: number
   backend: LevelOneBackend
   cameraMode: LevelOneCameraMode
   checkpointCount: number
   checkpointDistance: number
   checkpointIndex: number
+  coinCount: number
+  coinScore: number
+  coinsCollected: number
   damage: number
   engineRunning: boolean
   fps: number
@@ -97,13 +102,18 @@ export const EMPTY_LEVEL_ONE_CONTROL_INPUT: Readonly<LevelOneControlInput> = {
 }
 
 export const EMPTY_LEVEL_ONE_TELEMETRY: Readonly<LevelOneTelemetry> = {
+  airborneSeconds: 0,
   altitude: 0,
   angleOfAttack: 0,
+  airtimeScore: 0,
   backend: 'webgl2',
   cameraMode: 'chase',
   checkpointCount: 0,
   checkpointDistance: 0,
   checkpointIndex: 0,
+  coinCount: 0,
+  coinScore: 0,
+  coinsCollected: 0,
   damage: 0,
   engineRunning: false,
   fps: 0,

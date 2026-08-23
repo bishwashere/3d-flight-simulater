@@ -52,6 +52,20 @@ export interface GeometricCheckpoint {
   update: (elapsedSeconds: number) => void
 }
 
+export interface GeometricCoin {
+  readonly id: string
+  readonly index: number
+  readonly position: Vector3
+  readonly radius: number
+  readonly root: TransformNode
+  readonly value: number
+  readonly collected: boolean
+  /** Returns true only for the first collection before a reset. */
+  collect: () => boolean
+  reset: () => void
+  update: (elapsedSeconds: number) => void
+}
+
 export interface GeometricObstacleCollider {
   readonly center: Vector3
   readonly halfExtents?: Vector3
@@ -81,6 +95,7 @@ export interface GeometricWorld {
   readonly aircraft: GeometricAircraftVisual
   readonly bounds: GeometricWorldBounds
   readonly checkpoints: readonly GeometricCheckpoint[]
+  readonly coins: readonly GeometricCoin[]
   readonly landingZone: GeometricLandingZone
   readonly obstacles: readonly GeometricObstacleCollider[]
   readonly scene: Scene
@@ -88,6 +103,7 @@ export interface GeometricWorld {
   readonly spawnRotation: Quaternion
   clearCrashEffects: () => void
   dispose: () => void
+  resetCoins: () => void
   showCrashEffects: (position: Vector3, velocity?: Vector3) => void
   terrainHeightAt: (x: number, z: number) => number
   update: (elapsedSeconds: number, deltaSeconds: number) => void
