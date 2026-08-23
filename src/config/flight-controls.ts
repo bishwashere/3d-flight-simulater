@@ -21,9 +21,8 @@ export const CONTROL_GROUPS: readonly ControlGroup[] = [
   {
     title: 'Aircraft systems',
     bindings: [
+      { key: 'I', action: 'Start engine' },
       { key: 'B', action: 'Wheel brakes' },
-      { key: 'F', action: 'Cycle flaps' },
-      { key: 'G', action: 'Landing gear' },
       { key: 'R', action: 'Reset aircraft' },
     ],
   },
@@ -31,9 +30,8 @@ export const CONTROL_GROUPS: readonly ControlGroup[] = [
     title: 'View & session',
     bindings: [
       { key: 'C', action: 'Cycle camera' },
-      { key: 'M', action: 'Toggle minimap' },
       { key: 'P / Esc', action: 'Pause' },
-      { key: 'Gamepad', action: 'Standard dual-stick layout' },
+      { key: 'Mouse', action: 'Optional pointer yoke' },
     ],
   },
 ]

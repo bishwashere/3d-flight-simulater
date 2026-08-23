@@ -1,79 +1,158 @@
-import { FlyCamera } from '@babylonjs/core/Cameras/flyCamera.js'
+import { FreeCamera } from '@babylonjs/core/Cameras/freeCamera.js'
+import type { WebGPUEngine } from '@babylonjs/core/Engines/webgpuEngine.js'
 import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js'
-import { Vector3 } from '@babylonjs/core/Maths/math.vector.js'
+import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 
 import { createLevelOneEngine } from './create-level-one-engine'
 import type { LevelOneEngine } from './create-level-one-engine'
-import { createLevelOneHud } from './level-one-hud'
-import type { LevelOneHud } from './level-one-hud'
-import { getInitialPixelRatio } from './level-one-performance'
 import { createLevelOneScene } from './create-level-one-scene'
 import type { LevelOneWorld } from './create-level-one-scene'
-import type {
-  LevelOneAssets,
-  LevelOneBackend,
-  LevelOneTelemetry,
-  ResolvedLevelOnePerformance,
+import {
+  AircraftSimulation,
+  type AircraftControlInput,
+  type AircraftSimulationState,
+} from './flight/aircraft-simulation'
+import { createLevelOneAudio, type LevelOneAudio } from './level-one-audio'
+import { LevelOneCourse } from './level-one-course'
+import { createLevelOneHud, type LevelOneHud } from './level-one-hud'
+import { getInitialPixelRatio } from './level-one-performance'
+import {
+  EMPTY_LEVEL_ONE_CONTROL_INPUT,
+  EMPTY_LEVEL_ONE_TELEMETRY,
+  type LevelOneAssets,
+  type LevelOneBackend,
+  type LevelOneCameraMode,
+  type LevelOneControlInput,
+  type LevelOneGameStatus,
+  type LevelOneTelemetry,
+  type ResolvedLevelOnePerformance,
 } from './level-one-types'
+import {
+  GEOMETRIC_AIRCRAFT_COLLISION_RADIUS,
+  GEOMETRIC_AIRCRAFT_GROUND_CLEARANCE,
+} from './world/create-geometric-aircraft'
 
 export interface LevelOneRuntimeOptions {
   assets: LevelOneAssets
+  forceWebGl2?: boolean
+  masterVolume?: number
+  onBackendFailure?: () => void
+  onGameStatus?: (status: LevelOneGameStatus) => void
   onPauseChange?: (paused: boolean) => void
   onTelemetry?: (telemetry: LevelOneTelemetry) => void
   performance: ResolvedLevelOnePerformance
+  pointerYoke?: boolean
 }
+
+const DEG_PER_RADIAN = 180 / Math.PI
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value))
 }
 
+function damp(current: number, target: number, speed: number, delta: number): number {
+  return current + (target - current) * (1 - Math.exp(-speed * delta))
+}
+
 export class LevelOneRuntime {
+  private readonly audio: LevelOneAudio
   private readonly backend: LevelOneBackend
   private readonly basePixelRatio: number
-  private readonly camera: FlyCamera
+  private readonly camera: FreeCamera
+  private cameraMode: LevelOneCameraMode = 'chase'
   private readonly canvas: HTMLCanvasElement
+  private controlInput: LevelOneControlInput = {
+    ...EMPTY_LEVEL_ONE_CONTROL_INPUT,
+  }
+  private readonly course: LevelOneCourse
   private currentPixelRatio: number
   private readonly engine: LevelOneEngine
   private frameCount = 0
+  private backendFailed = false
   private readonly hud: LevelOneHud
-  private lastAdaptiveUpdate = performance.now()
-  private lastSamplePosition: Vector3
-  private lastTelemetryUpdate = performance.now()
+  private lastAdaptiveUpdate = globalThis.performance.now()
+  private lastFrameTime = globalThis.performance.now()
+  private lastStatusKey = ''
+  private lastTelemetryUpdate = globalThis.performance.now()
+  private readonly onGameStatus?: (status: LevelOneGameStatus) => void
   private readonly onPauseChange?: (paused: boolean) => void
   private readonly onTelemetry?: (telemetry: LevelOneTelemetry) => void
   private paused = false
+  private pointerPitch = 0
+  private pointerRoll = 0
+  private readonly pointerYoke: boolean
   private readonly resizeObserver: ResizeObserver
   private readonly settings: ResolvedLevelOnePerformance
-  private shiftBoost = false
-  private smoothedSpeed = 0
+  private readonly simulation: AircraftSimulation
   private readonly world: LevelOneWorld
+  private webGpuDevice?: GPUDevice
+  private webGpuErrorHandler?: (event: GPUUncapturedErrorEvent) => void
 
   private constructor(
     canvas: HTMLCanvasElement,
     engine: LevelOneEngine,
     backend: LevelOneBackend,
     world: LevelOneWorld,
-    camera: FlyCamera,
+    camera: FreeCamera,
     hud: LevelOneHud,
     options: LevelOneRuntimeOptions,
     pixelRatio: number,
   ) {
+    this.audio = createLevelOneAudio({ masterVolume: options.masterVolume })
     this.backend = backend
     this.basePixelRatio = pixelRatio
     this.camera = camera
     this.canvas = canvas
+    this.course = new LevelOneCourse(world.checkpoints)
     this.currentPixelRatio = pixelRatio
     this.engine = engine
     this.hud = hud
-    this.lastSamplePosition = camera.position.clone()
+    this.onGameStatus = options.onGameStatus
     this.onPauseChange = options.onPauseChange
     this.onTelemetry = options.onTelemetry
+    this.pointerYoke = options.pointerYoke ?? false
     this.settings = options.performance
     this.world = world
+    this.simulation = new AircraftSimulation({
+      crashImpactSpeed: 8.5,
+      gearClearance: GEOMETRIC_AIRCRAFT_GROUND_CLEARANCE,
+      spawnPosition: world.spawnPosition,
+      spawnRotation: world.spawnRotation,
+      terrainHeightAt: world.terrainHeightAt,
+      windAt: (position, elapsedSeconds) =>
+        new Vector3(
+          1.8 + Math.sin(elapsedSeconds * 0.19 + position.z * 0.003) * 0.75,
+          Math.sin(elapsedSeconds * 1.7 + position.x * 0.01) * 0.14,
+          0.65 + Math.cos(elapsedSeconds * 0.23) * 0.35,
+        ),
+    })
     this.resizeObserver = new ResizeObserver(() => this.engine.resize())
     this.resizeObserver.observe(canvas)
 
+    if (backend === 'webgpu') {
+      const device = (engine as WebGPUEngine)._device
+      this.webGpuDevice = device
+      this.webGpuErrorHandler = (event) => {
+        if (this.backendFailed) {
+          return
+        }
+        this.backendFailed = true
+        event.preventDefault()
+        this.engine.stopRenderLoop(this.renderFrame)
+        console.warn(
+          'WebGPU became unavailable while rendering; restarting with WebGL2.',
+          event.error,
+        )
+        options.onBackendFailure?.()
+      }
+      device.addEventListener('uncapturederror', this.webGpuErrorHandler)
+    }
+
+    this.resetCheckpointVisuals()
+    this.syncAircraftVisual(this.simulation.state, 0)
+    this.updateCamera(this.simulation.state, 1 / 60, true)
     this.attachInput()
+    this.emitGameStatus(true)
     this.engine.runRenderLoop(this.renderFrame)
   }
 
@@ -81,7 +160,9 @@ export class LevelOneRuntime {
     canvas: HTMLCanvasElement,
     options: LevelOneRuntimeOptions,
   ): Promise<LevelOneRuntime> {
-    const { backend, engine } = await createLevelOneEngine(canvas)
+    const { backend, engine } = await createLevelOneEngine(canvas, {
+      forceWebGl2: options.forceWebGl2,
+    })
     const pixelRatio = getInitialPixelRatio(options.performance)
     engine.setHardwareScalingLevel(1 / pixelRatio)
 
@@ -91,43 +172,22 @@ export class LevelOneRuntime {
         options.performance,
         options.assets,
       )
-      const camera = new FlyCamera(
-        'first-person-flight-camera',
+      const camera = new FreeCamera(
+        'level-one-flight-camera',
         world.spawnPosition.clone(),
         world.scene,
       )
-      camera.setTarget(world.spawnTarget)
-      camera.minZ = 0.15
+      camera.minZ = 0.12
       camera.maxZ = options.performance.renderDistance
-      camera.fov = 1.05
-      camera.inertia = 0.74
-      camera.angularSensibility = 3_200
-      camera.speed = 18
-      camera.checkCollisions = true
-      camera.applyGravity = false
-      camera.ellipsoid.copyFromFloats(1.25, 1.1, 1.25)
-      camera.ellipsoidOffset.copyFromFloats(0, -0.1, 0)
-      camera.bankedTurn = false
-      camera.keysForward = [87, 38]
-      camera.keysBackward = [83, 40]
-      camera.keysLeft = [65, 37]
-      camera.keysRight = [68, 39]
-      camera.keysUp = [32, 69]
-      camera.keysDown = [17, 81]
+      camera.fov = 0.92
+      camera.inertia = 0
       world.scene.activeCamera = camera
-      camera.attachControl(false)
 
       const initialTelemetry: LevelOneTelemetry = {
-        altitude: Math.max(
-          0,
-          camera.position.y - world.terrainHeightAt(camera.position.x, camera.position.z),
-        ),
+        ...EMPTY_LEVEL_ONE_TELEMETRY,
         backend,
-        fps: 0,
+        checkpointCount: world.checkpoints.length,
         meshCount: world.scene.meshes.length,
-        pointerLocked: false,
-        renderScale: 1,
-        speed: 0,
       }
       const hud = createLevelOneHud(world.scene, initialTelemetry)
       return new LevelOneRuntime(
@@ -141,34 +201,60 @@ export class LevelOneRuntime {
         pixelRatio,
       )
     } catch (error) {
-      engine.dispose()
+      try {
+        engine.dispose()
+      } catch (cleanupError) {
+        console.warn('Level 1 renderer cleanup was incomplete.', cleanupError)
+      }
+      if (backend === 'webgpu' && !options.forceWebGl2) {
+        options.onBackendFailure?.()
+      }
       throw error
     }
   }
 
   private attachInput(): void {
-    const { scene } = this.world
-    scene.onPointerObservable.add((pointerInfo) => {
+    this.world.scene.onPointerObservable.add((pointerInfo) => {
       if (
         pointerInfo.type === PointerEventTypes.POINTERDOWN &&
         pointerInfo.event.button === 0 &&
+        this.pointerYoke &&
         !this.paused
       ) {
         this.requestPointerLock()
+      }
+
+      if (
+        pointerInfo.type === PointerEventTypes.POINTERMOVE &&
+        this.pointerYoke &&
+        this.engine.isPointerLock &&
+        !this.paused
+      ) {
+        const event = pointerInfo.event as PointerEvent
+        this.pointerRoll = clamp(
+          this.pointerRoll + event.movementX * 0.0028,
+          -1,
+          1,
+        )
+        this.pointerPitch = clamp(
+          this.pointerPitch - event.movementY * 0.0028,
+          -1,
+          1,
+        )
       }
     })
   }
 
   private readonly renderFrame = (): void => {
-    const now = performance.now()
-    this.camera.speed = this.shiftBoost ? 65 : 18
-    this.enforceWorldBounds()
+    const now = globalThis.performance.now()
+    const deltaSeconds = clamp((now - this.lastFrameTime) / 1_000, 0, 0.1)
+    this.lastFrameTime = now
 
-    this.frameCount += 1
-    if (this.frameCount % 15 === 0) {
-      this.world.updateDistanceCulling(this.camera.position)
+    if (!this.paused) {
+      this.stepGame(deltaSeconds)
     }
 
+    this.frameCount += 1
     if (now - this.lastTelemetryUpdate >= 100) {
       this.updateTelemetry(now)
     }
@@ -183,66 +269,334 @@ export class LevelOneRuntime {
     this.world.scene.render()
   }
 
-  private enforceWorldBounds(): void {
-    const position = this.camera.position
+  private stepGame(deltaSeconds: number): void {
+    this.pointerPitch = damp(this.pointerPitch, 0, 0.55, deltaSeconds)
+    this.pointerRoll = damp(this.pointerRoll, 0, 0.55, deltaSeconds)
+
+    const input = this.resolveSimulationInput()
+    const interpolationAlpha = this.simulation.advance(deltaSeconds, input)
+    this.checkWorldCollisions()
+    this.processCourse()
+    this.processCrash()
+
+    const renderState = this.simulation.getInterpolatedState(interpolationAlpha)
+    this.syncAircraftVisual(renderState, deltaSeconds)
+    this.updateCamera(renderState, deltaSeconds)
+    this.world.update(renderState.elapsedSeconds, deltaSeconds)
+    this.audio.setEngineState({
+      airspeed: renderState.airspeed,
+      running: renderState.engineRunning,
+      throttle: renderState.throttle,
+    })
+  }
+
+  private resolveSimulationInput(): AircraftControlInput {
+    const throttleDelta =
+      Number(this.controlInput.throttleUp) -
+      Number(this.controlInput.throttleDown)
+
+    return {
+      brakes: this.controlInput.brakes,
+      pitch: clamp(this.controlInput.pitch + this.pointerPitch, -1, 1),
+      roll: clamp(this.controlInput.roll + this.pointerRoll, -1, 1),
+      throttleDelta,
+      yaw: this.controlInput.yaw,
+    }
+  }
+
+  private checkWorldCollisions(): void {
+    const state = this.simulation.state
+    if (state.crashed) {
+      return
+    }
+
+    const { position } = state
     const { bounds } = this.world
-    position.x = clamp(position.x, bounds.minimumX + 2, bounds.maximumX - 2)
-    position.z = clamp(position.z, bounds.minimumZ + 2, bounds.maximumZ - 2)
-    const ground = Math.max(
-      bounds.minimumAltitude,
-      this.world.terrainHeightAt(position.x, position.z),
+    if (
+      position.x < bounds.minimumX ||
+      position.x > bounds.maximumX ||
+      position.z < bounds.minimumZ ||
+      position.z > bounds.maximumZ ||
+      position.y > bounds.maximumAltitude
+    ) {
+      this.simulation.crash('terrain-impact')
+      return
+    }
+
+    for (const obstacle of this.world.obstacles) {
+      if (obstacle.kind === 'hill') {
+        continue
+      }
+
+      let collision = false
+      if (obstacle.halfExtents) {
+        const closestX = clamp(
+          position.x,
+          obstacle.center.x - obstacle.halfExtents.x,
+          obstacle.center.x + obstacle.halfExtents.x,
+        )
+        const closestY = clamp(
+          position.y,
+          obstacle.center.y - obstacle.halfExtents.y,
+          obstacle.center.y + obstacle.halfExtents.y,
+        )
+        const closestZ = clamp(
+          position.z,
+          obstacle.center.z - obstacle.halfExtents.z,
+          obstacle.center.z + obstacle.halfExtents.z,
+        )
+        collision =
+          Vector3.DistanceSquared(
+            position,
+            new Vector3(closestX, closestY, closestZ),
+          ) <=
+          GEOMETRIC_AIRCRAFT_COLLISION_RADIUS ** 2
+      } else {
+        collision =
+          Vector3.DistanceSquared(position, obstacle.center) <=
+          (obstacle.radius + GEOMETRIC_AIRCRAFT_COLLISION_RADIUS) ** 2
+      }
+
+      if (!collision) {
+        continue
+      }
+
+      const normal = position.subtract(obstacle.center)
+      if (normal.lengthSquared() < 0.001) {
+        normal.copyFromFloats(0, 1, 0)
+      } else {
+        normal.normalize()
+      }
+      this.simulation.registerCollision(
+        Math.max(10, this.simulation.state.airspeed),
+        normal,
+      )
+      return
+    }
+  }
+
+  private processCourse(): void {
+    const state = this.simulation.state
+    const event = this.course.update({
+      insideLandingZone: this.isInsideLandingZone(state.position),
+      onGround: state.onGround,
+      position: state.position,
+      speed: state.airspeed,
+      verticalSpeed: state.verticalSpeed,
+    })
+
+    if (!event) {
+      return
+    }
+
+    if (event.type === 'checkpoint') {
+      this.audio.playCheckpoint()
+      this.updateCheckpointVisuals()
+    } else {
+      this.simulation.setThrottle(0)
+      this.audio.playSuccess()
+    }
+    this.emitGameStatus(true)
+  }
+
+  private processCrash(): void {
+    const state = this.simulation.state
+    const snapshot = this.course.getSnapshot(state.position)
+    if (!state.crashed || snapshot.phase === 'crashed') {
+      return
+    }
+
+    this.course.crash()
+    this.cameraMode = 'chase'
+    this.setAircraftVisibility(true)
+    this.world.aircraft.setCrashState(true)
+    this.world.showCrashEffects(state.position, state.velocity)
+    this.audio.playCrash()
+    this.emitGameStatus(true)
+  }
+
+  private isInsideLandingZone(position: Vector3): boolean {
+    const zone = this.world.landingZone
+    const offsetX = position.x - zone.center.x
+    const offsetZ = position.z - zone.center.z
+    const sine = Math.sin(zone.headingRadians)
+    const cosine = Math.cos(zone.headingRadians)
+    const alongRunway = offsetX * sine + offsetZ * cosine
+    const acrossRunway = offsetX * cosine - offsetZ * sine
+    return (
+      Math.abs(alongRunway) <= zone.halfLength &&
+      Math.abs(acrossRunway) <= zone.halfWidth
     )
-    position.y = clamp(position.y, ground + 1.35, bounds.maximumAltitude - 2)
+  }
+
+  private syncAircraftVisual(
+    state: AircraftSimulationState,
+    deltaSeconds: number,
+  ): void {
+    this.world.aircraft.root.position.copyFrom(state.position)
+    if (!this.world.aircraft.root.rotationQuaternion) {
+      this.world.aircraft.root.rotationQuaternion = Quaternion.Identity()
+    }
+    this.world.aircraft.root.rotationQuaternion.copyFrom(state.rotation)
+    this.world.aircraft.root.computeWorldMatrix(true)
+    this.world.aircraft.updateAnimations(
+      {
+        engineRunning: state.engineRunning,
+        gearRetraction: 0,
+        pitch: this.controlInput.pitch,
+        roll: this.controlInput.roll,
+        throttle: state.throttle,
+        yaw: this.controlInput.yaw,
+      },
+      deltaSeconds,
+    )
+  }
+
+  private updateCamera(
+    state: AircraftSimulationState,
+    deltaSeconds: number,
+    immediate = false,
+  ): void {
+    const forward = Vector3.Forward()
+    const up = Vector3.Up()
+    forward.rotateByQuaternionToRef(state.rotation, forward)
+    up.rotateByQuaternionToRef(state.rotation, up)
+
+    let desiredPosition: Vector3
+    let target: Vector3
+    if (this.cameraMode === 'cockpit') {
+      desiredPosition = state.position
+        .add(forward.scale(2.1))
+        .add(up.scale(1.05))
+      target = desiredPosition.add(forward.scale(90)).add(up.scale(0.2))
+    } else {
+      desiredPosition = state.position
+        .subtract(forward.scale(17.5))
+        .add(up.scale(5.6))
+        .add(Vector3.Up().scale(1.8))
+      target = state.position.add(forward.scale(13)).add(up.scale(1.2))
+    }
+
+    if (state.crashed) {
+      const shakeStrength = Math.max(0, 1.2 - state.elapsedSeconds * 0.01)
+      desiredPosition.addInPlace(
+        new Vector3(
+          Math.sin(state.elapsedSeconds * 41) * 0.16 * shakeStrength,
+          Math.cos(state.elapsedSeconds * 37) * 0.1 * shakeStrength,
+          0,
+        ),
+      )
+    }
+
+    if (immediate) {
+      this.camera.position.copyFrom(desiredPosition)
+    } else {
+      Vector3.LerpToRef(
+        this.camera.position,
+        desiredPosition,
+        1 - Math.exp(-6.5 * deltaSeconds),
+        this.camera.position,
+      )
+    }
+    this.camera.setTarget(target)
+  }
+
+  private updateCheckpointVisuals(): void {
+    const snapshot = this.course.getSnapshot(this.simulation.state.position)
+    for (const [index, checkpoint] of this.world.checkpoints.entries()) {
+      checkpoint.setState(
+        index < snapshot.checkpointIndex
+          ? 'collected'
+          : index === snapshot.checkpointIndex
+            ? 'active'
+            : 'pending',
+      )
+    }
+  }
+
+  private resetCheckpointVisuals(): void {
+    this.world.checkpoints.forEach((checkpoint, index) => {
+      checkpoint.setState(index === 0 ? 'active' : 'pending')
+    })
   }
 
   private updateTelemetry(now: number): void {
-    const elapsedSeconds = Math.max(
-      0.001,
-      (now - this.lastTelemetryUpdate) / 1_000,
-    )
-    const travelled = Vector3.Distance(
-      this.camera.position,
-      this.lastSamplePosition,
-    )
-    const measuredSpeed = this.paused ? 0 : (travelled / elapsedSeconds) * 3.6
-    this.smoothedSpeed = this.smoothedSpeed * 0.62 + measuredSpeed * 0.38
-    this.lastSamplePosition.copyFrom(this.camera.position)
     this.lastTelemetryUpdate = now
-
-    const ground = this.world.terrainHeightAt(
-      this.camera.position.x,
-      this.camera.position.z,
+    const state = this.simulation.state
+    const course = this.course.getSnapshot(state.position)
+    const euler = state.rotation.toEulerAngles()
+    const displayedSpeed = state.onGround
+      ? Math.hypot(state.velocity.x, state.velocity.z)
+      : state.airspeed
+    const terrainHeight = this.world.terrainHeightAt(
+      state.position.x,
+      state.position.z,
     )
     const telemetry: LevelOneTelemetry = {
-      altitude: Math.max(0, this.camera.position.y - ground),
+      altitude: Math.max(
+        0,
+        state.position.y - terrainHeight - GEOMETRIC_AIRCRAFT_GROUND_CLEARANCE,
+      ),
+      angleOfAttack: state.angleOfAttack,
       backend: this.backend,
+      cameraMode: this.cameraMode,
+      checkpointCount: course.checkpointCount,
+      checkpointDistance: course.checkpointDistance,
+      checkpointIndex: course.checkpointIndex,
+      damage: state.damage,
+      engineRunning: state.engineRunning,
       fps: this.engine.getFps(),
+      heading: state.heading,
       meshCount: this.world.scene.meshes.length,
+      objective: course.objective,
+      onGround: state.onGround,
+      phase: course.phase,
+      pitch: -euler.x * DEG_PER_RADIAN,
       pointerLocked: this.engine.isPointerLock,
       renderScale: this.currentPixelRatio / this.basePixelRatio,
-      speed: Math.min(999, this.smoothedSpeed),
+      roll: -euler.z * DEG_PER_RADIAN,
+      score: course.score,
+      speed: Math.min(999, displayedSpeed * 3.6),
+      stalled: state.stalled,
+      throttle: state.throttle,
+      verticalSpeed: state.verticalSpeed,
     }
-    this.canvas.dataset.positionX = this.camera.position.x.toFixed(2)
-    this.canvas.dataset.positionY = this.camera.position.y.toFixed(2)
-    this.canvas.dataset.positionZ = this.camera.position.z.toFixed(2)
+
+    this.canvas.dataset.positionX = state.position.x.toFixed(2)
+    this.canvas.dataset.positionY = state.position.y.toFixed(2)
+    this.canvas.dataset.positionZ = state.position.z.toFixed(2)
     this.hud.update(telemetry)
     this.onTelemetry?.(telemetry)
   }
 
+  private emitGameStatus(force = false): void {
+    const snapshot = this.course.getSnapshot(this.simulation.state.position)
+    const status: LevelOneGameStatus = {
+      phase: snapshot.phase,
+      score: snapshot.score,
+    }
+    const key = `${status.phase}:${status.score}`
+    if (!force && key === this.lastStatusKey) {
+      return
+    }
+    this.lastStatusKey = key
+    this.onGameStatus?.(status)
+  }
+
   private updateAdaptiveResolution(now: number): void {
     const fps = this.engine.getFps()
-    const minimumPixelRatio = Math.max(0.5, this.basePixelRatio * 0.58)
+    const minimumPixelRatio = Math.max(0.7, this.basePixelRatio * 0.68)
     let nextPixelRatio = this.currentPixelRatio
 
-    if (fps < this.settings.targetFps - 7) {
+    if (fps < this.settings.targetFps - 8) {
       nextPixelRatio = Math.max(
         minimumPixelRatio,
-        this.currentPixelRatio * 0.88,
+        this.currentPixelRatio * 0.9,
       )
     } else if (fps > this.settings.targetFps - 1.5) {
       nextPixelRatio = Math.min(
         this.basePixelRatio,
-        this.currentPixelRatio * 1.05,
+        this.currentPixelRatio * 1.04,
       )
     }
 
@@ -255,19 +609,62 @@ export class LevelOneRuntime {
     this.lastAdaptiveUpdate = now
   }
 
-  requestPointerLock(): void {
-    if (!this.paused && !this.engine.isPointerLock) {
-      this.canvas.focus()
-      this.engine.enterPointerlock()
+  private setAircraftVisibility(visible: boolean): void {
+    for (const mesh of this.world.aircraft.root.getChildMeshes(false)) {
+      mesh.visibility = visible ? 1 : 0
     }
   }
 
-  resetView(): void {
-    this.camera.position.copyFrom(this.world.spawnPosition)
-    this.camera.cameraDirection.copyFromFloats(0, 0, 0)
-    this.camera.setTarget(this.world.spawnTarget)
-    this.lastSamplePosition.copyFrom(this.camera.position)
-    this.smoothedSpeed = 0
+  setControlInput(input: LevelOneControlInput): void {
+    this.controlInput = { ...input }
+  }
+
+  startEngine(): void {
+    const snapshot = this.course.getSnapshot(this.simulation.state.position)
+    if (snapshot.phase !== 'ready') {
+      return
+    }
+
+    void this.audio.unlock()
+    this.audio.startEngine()
+    this.simulation.setEngineRunning(true)
+    this.course.start()
+    this.emitGameStatus(true)
+  }
+
+  cycleCamera(): void {
+    const phase = this.course.getSnapshot(this.simulation.state.position).phase
+    if (phase === 'crashed' || phase === 'complete') {
+      return
+    }
+    this.cameraMode = this.cameraMode === 'chase' ? 'cockpit' : 'chase'
+    this.setAircraftVisibility(this.cameraMode === 'chase')
+    this.updateCamera(this.simulation.state, 1 / 60, true)
+  }
+
+  resetGame(): void {
+    this.simulation.reset()
+    this.course.reset()
+    this.controlInput = { ...EMPTY_LEVEL_ONE_CONTROL_INPUT }
+    this.pointerPitch = 0
+    this.pointerRoll = 0
+    this.cameraMode = 'chase'
+    this.world.clearCrashEffects()
+    this.world.aircraft.setCrashState(false)
+    this.setAircraftVisibility(true)
+    this.audio.reset()
+    this.resetCheckpointVisuals()
+    this.syncAircraftVisual(this.simulation.state, 0)
+    this.updateCamera(this.simulation.state, 1 / 60, true)
+    this.lastFrameTime = globalThis.performance.now()
+    this.emitGameStatus(true)
+  }
+
+  requestPointerLock(): void {
+    if (this.pointerYoke && !this.paused && !this.engine.isPointerLock) {
+      this.canvas.focus()
+      this.engine.enterPointerlock()
+    }
   }
 
   releasePointerLockOrPause(): void {
@@ -275,12 +672,7 @@ export class LevelOneRuntime {
       this.engine.exitPointerlock()
       return
     }
-
     this.setPaused(true)
-  }
-
-  setBoost(enabled: boolean): void {
-    this.shiftBoost = enabled && !this.paused
   }
 
   togglePaused(): void {
@@ -293,15 +685,16 @@ export class LevelOneRuntime {
     }
 
     this.paused = paused
-    this.shiftBoost = false
+    this.controlInput = { ...EMPTY_LEVEL_ONE_CONTROL_INPUT }
     this.hud.setVisible(!paused)
 
     if (paused) {
-      this.camera.detachControl()
       this.engine.exitPointerlock()
+      void this.audio.pause()
     } else {
-      this.camera.attachControl(false)
+      this.lastFrameTime = globalThis.performance.now()
       this.canvas.focus()
+      void this.audio.resume()
     }
 
     this.onPauseChange?.(paused)
@@ -310,9 +703,26 @@ export class LevelOneRuntime {
   dispose(): void {
     this.engine.stopRenderLoop(this.renderFrame)
     this.resizeObserver.disconnect()
-    this.camera.detachControl()
-    this.hud.dispose()
-    this.world.scene.dispose()
-    this.engine.dispose()
+    if (this.webGpuDevice && this.webGpuErrorHandler) {
+      this.webGpuDevice.removeEventListener(
+        'uncapturederror',
+        this.webGpuErrorHandler,
+      )
+    }
+    this.engine.exitPointerlock()
+    const cleanupSteps = [
+      () => this.audio.dispose(),
+      () => this.hud.dispose(),
+      () => this.world.dispose(),
+      () => this.world.scene.dispose(),
+      () => this.engine.dispose(),
+    ]
+    for (const cleanup of cleanupSteps) {
+      try {
+        cleanup()
+      } catch (error) {
+        console.warn('A Level 1 cleanup step was incomplete.', error)
+      }
+    }
   }
 }

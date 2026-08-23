@@ -16,6 +16,10 @@ export function LevelOneRoute() {
   const adaptiveResolutionEnabled = useSettingsStore(
     (state) => state.adaptiveResolutionEnabled,
   )
+  const masterVolume = useSettingsStore((state) => state.masterVolume)
+  const pointerYokeEnabled = useSettingsStore(
+    (state) => state.pointerYokeEnabled,
+  )
   const qualityPreset = useSettingsStore((state) => state.qualityPreset)
   const renderDistance = useSettingsStore((state) => state.renderDistance)
   const renderScale = useSettingsStore((state) => state.renderScale)
@@ -26,6 +30,7 @@ export function LevelOneRoute() {
 
   return (
     <LevelOneScreen
+      masterVolume={masterVolume}
       onExit={() => void navigate(PANEL_PATHS.levels)}
       performance={{
         adaptiveResolution: adaptiveResolutionEnabled,
@@ -35,6 +40,7 @@ export function LevelOneRoute() {
         shadows: shadowsEnabled,
         vegetationDensity,
       }}
+      pointerYoke={pointerYokeEnabled}
     />
   )
 }

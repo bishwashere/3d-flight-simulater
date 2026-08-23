@@ -1,45 +1,47 @@
 # Coastal Flight Simulator
 
-Desktop-first browser flight-simulator project built with React, TypeScript,
-Tailwind CSS, Zustand, and Babylon.js. The current milestone is intentionally a
-map-review build: choose Level 1 and explore a real airport environment with a
-first-person flying camera. Aircraft physics come later.
+Desktop-first geometric flight game built with React, TypeScript, Tailwind CSS,
+Zustand, and Babylon.js. Level 1 is a compact coastal training course: start on
+the runway, fly through the ordered checkpoint rings, and return for a safe
+landing.
 
-## Current build
+## Level 1
 
-- Route-backed home (`/`), level selection (`/play`), and Level 1
-  (`/game/level-1`)
-- Babylon.js WebGPU startup with automatic WebGL2 fallback
-- Local KSQL/San Carlos Airport terrain, satellite imagery, buildings, runway,
-  taxiways, apron, roads, lagoon, and surrounding neighborhoods
-- Pointer-lock mouse look and six-direction keyboard movement
-- Mesh collisions, world bounds, pause, focus-loss handling, and clean reset
-- Babylon GUI telemetry updated at 10 Hz
-- Low, Medium, High, and custom performance settings persisted with Zustand and
-  validated with Zod
-- Local menu artwork plus synthesized UI and background audio
-- No paid map service, runtime CDN, API key, or external token
+- Procedural island, airport, runway, hills, water, obstacles, and aircraft made
+  from Babylon.js primitives
+- Fixed-step 120 Hz aircraft simulation, independent from React rendering
+- Ground roll, throttle, lift, drag, stalls, steering, braking, and crash checks
+- Cockpit and chase cameras
+- Ordered checkpoint scoring, destination guidance, landing validation, crash
+  reset, and level completion
+- Babylon GUI flight HUD with live aircraft and course telemetry
+- Procedural engine, wind, checkpoint, crash/fire, and success audio generated
+  with the Web Audio API
+- WebGPU when supported, with automatic WebGL2 fallback
+- Low, Medium, and High performance presets persisted with Zustand and validated
+  with Zod
+
+No map service, API key, runtime CDN, or external Level 1 art/audio asset is
+required.
 
 ## Controls
 
 | Input | Action |
 | --- | --- |
-| Mouse | Look around after pointer lock |
-| W / S or ↑ / ↓ | Move forward / backward |
-| A / D or ← / → | Move left / right |
-| Space / E | Rise |
-| Ctrl / Q | Descend |
-| Shift | Boost |
-| R | Reset above the airport |
-| P | Pause / resume |
-| Escape | Release pointer lock, then pause |
+| I | Start engine |
+| Shift / Ctrl | Increase / decrease throttle |
+| W / S | Pitch control |
+| A / D | Roll control |
+| Q / E | Yaw / rudder control |
+| B | Hold brakes |
+| C | Switch cockpit / chase camera |
+| R | Reset flight |
+| P / Escape | Pause / resume |
 
-## Performance
-
-Open **Settings → Performance** before entering the map. Render distance controls
-the camera range and fog. Render scale caps internal pixel density, shadows can
-be disabled, and adaptive resolution moves toward the selected frame-rate target.
-Babylon and the world assets are lazy-loaded only on the Level 1 route.
+Fly through every ring in order. After the final checkpoint, follow the runway
+guidance, touch down gently inside the marked landing zone, and slow to complete
+the level. A hard impact or obstacle collision crashes the aircraft; reset to
+retry cleanly.
 
 ## Commands
 
@@ -58,39 +60,36 @@ bun run build
 
 ```text
 src/
-├── audio/                     # Reusable UI and ambience services
-├── components/
-│   ├── game/                  # React lifecycle shell for Babylon
-│   ├── home/                  # Launcher presentation
-│   ├── panels/                # Levels, settings, controls, credits
-│   └── ui/                    # Reusable headless UI wrappers
+├── audio/                         # Menu ambience and reusable UI sounds
+├── components/game/               # React lifecycle and game-state overlays
 ├── game/
-│   ├── world/                 # KSQL asset loader and world setup
-│   ├── create-level-one-engine.ts
-│   ├── create-level-one-scene.ts
-│   ├── level-one-hud.ts
-│   └── level-one-runtime.ts   # Camera, loop, bounds, telemetry
-├── hooks/                     # React adapters for reusable services
-├── state/                     # Zod-validated Zustand settings
-└── app-router.tsx             # Browser routes and lazy game boundary
-
-public/assets/world/
-├── ASSET-SOURCES.md           # Source, license, adaptations, hashes
-└── ksql-airport/              # Local GLB geometry and satellite texture
+│   ├── flight/
+│   │   └── aircraft-simulation.ts # Pure fixed-step aircraft simulation
+│   ├── world/                     # Geometric world, aircraft, and crash VFX
+│   ├── create-level-one-engine.ts # WebGPU/WebGL2 engine selection
+│   ├── create-level-one-scene.ts  # Babylon scene composition
+│   ├── level-one-audio.ts         # Procedural Web Audio soundscape
+│   ├── level-one-course.ts        # Checkpoints, score, and landing rules
+│   ├── level-one-hud.ts           # Babylon GUI instruments and guidance
+│   └── level-one-runtime.ts       # 120 Hz loop, cameras, state, and telemetry
+├── hooks/                         # React adapters for reusable services
+├── state/                         # Zod-validated Zustand settings
+└── app-router.tsx                 # Route-backed menus and lazy game boundary
 ```
 
-React owns menus and the engine lifecycle. Babylon owns camera state and all
-per-frame rendering, so movement does not trigger React renders.
+React owns routing, menus, settings, and full-screen states. Babylon owns the
+scene, cameras, HUD, and visual effects. The runtime advances flight logic at a
+stable 120 Hz and publishes throttled telemetry instead of rendering React every
+frame.
 
 ## Assets and licenses
 
-- KSQL Airport by OpenRobotics and Cole Biesemeyer, adapted under
-  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Exact source,
-  changes, and checksums are in
-  [`public/assets/world/ASSET-SOURCES.md`](public/assets/world/ASSET-SOURCES.md).
+- Level 1 geometry, materials, effects, and audio are generated at runtime; no
+  third-party Level 1 art or sound files are used.
 - Google Sans Flex via Fontsource: SIL Open Font License 1.1.
 - Lucide icons: ISC, with Feather-derived icons under MIT terms.
 - Menu key art was generated specifically for this project with OpenAI image
-  generation. UI sounds and ambience are synthesized locally at runtime.
+  generation.
 
-All Level 1 media is served by Vite from the repository.
+See [`public/assets/world/ASSET-SOURCES.md`](public/assets/world/ASSET-SOURCES.md)
+for the Level 1 asset policy.

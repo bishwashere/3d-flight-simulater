@@ -1,9 +1,11 @@
+import '@babylonjs/core/Engines/Extensions/engine.dynamicTexture.js'
+import '@babylonjs/core/Engines/WebGPU/Extensions/engine.dynamicTexture.js'
+
+import type { Scene } from '@babylonjs/core/scene.js'
 import { AdvancedDynamicTexture } from '@babylonjs/gui/2D/advancedDynamicTexture.js'
 import { Control } from '@babylonjs/gui/2D/controls/control.js'
 import { Rectangle } from '@babylonjs/gui/2D/controls/rectangle.js'
 import { TextBlock } from '@babylonjs/gui/2D/controls/textBlock.js'
-
-import type { Scene } from '@babylonjs/core/scene.js'
 
 import type { LevelOneTelemetry } from './level-one-types'
 
@@ -13,20 +15,43 @@ export interface LevelOneHud {
   update: (telemetry: LevelOneTelemetry) => void
 }
 
+const HUD = '#8fffe7'
+const HUD_DIM = '#6fd3c5'
+const AMBER = '#ffc66d'
+const RED = '#ff665f'
+
 function createText(
   name: string,
   text: string,
   fontSize: number,
-  color = '#dffdfa',
+  color = HUD,
 ): TextBlock {
   const control = new TextBlock(name, text)
   control.color = color
-  control.fontFamily = 'Google Sans Flex, Arial, sans-serif'
+  control.fontFamily = 'Google Sans Flex, Google Sans, Arial, sans-serif'
   control.fontSize = fontSize
-  control.fontWeight = '600'
+  control.fontWeight = '650'
   control.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT
   control.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT
+  control.textVerticalAlignment = Control.VERTICAL_ALIGNMENT_CENTER
+  control.shadowColor = '#021013'
+  control.shadowBlur = 8
   return control
+}
+
+function createHudPanel(
+  name: string,
+  width: string,
+  height: string,
+): Rectangle {
+  const panel = new Rectangle(name)
+  panel.width = width
+  panel.height = height
+  panel.background = '#03151acc'
+  panel.color = '#67dacc66'
+  panel.thickness = 1
+  panel.cornerRadius = 3
+  return panel
 }
 
 export function createLevelOneHud(
@@ -41,63 +66,167 @@ export function createLevelOneHud(
   texture.idealWidth = 1_920
   texture.renderAtIdealSize = true
 
-  const crosshair = createText('flight-crosshair', '＋', 27, '#a3fff9')
-  crosshair.width = '42px'
-  crosshair.height = '42px'
-  crosshair.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER
-  crosshair.textVerticalAlignment = Control.VERTICAL_ALIGNMENT_CENTER
+  const flightPanel = createHudPanel('flight-data-panel', '306px', '146px')
+  flightPanel.left = '28px'
+  flightPanel.top = '28px'
+  flightPanel.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT
+  flightPanel.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP
+  texture.addControl(flightPanel)
+
+  const levelLabel = createText('level-label', 'LEVEL 1  //  ISLAND RUN', 13)
+  levelLabel.left = '17px'
+  levelLabel.top = '-54px'
+  levelLabel.width = '270px'
+  levelLabel.height = '24px'
+  flightPanel.addControl(levelLabel)
+
+  const primaryData = createText('primary-flight-data', '', 20)
+  primaryData.left = '17px'
+  primaryData.top = '-4px'
+  primaryData.width = '276px'
+  primaryData.height = '68px'
+  primaryData.lineSpacing = '10px'
+  flightPanel.addControl(primaryData)
+
+  const secondaryData = createText('secondary-flight-data', '', 12, HUD_DIM)
+  secondaryData.left = '17px'
+  secondaryData.top = '49px'
+  secondaryData.width = '276px'
+  secondaryData.height = '27px'
+  flightPanel.addControl(secondaryData)
+
+  const objectivePanel = createHudPanel(
+    'objective-panel',
+    '440px',
+    '80px',
+  )
+  objectivePanel.top = '28px'
+  objectivePanel.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER
+  objectivePanel.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP
+  texture.addControl(objectivePanel)
+
+  const objectiveLabel = createText('objective-label', 'OBJECTIVE', 11, HUD_DIM)
+  objectiveLabel.left = '16px'
+  objectiveLabel.top = '-21px'
+  objectiveLabel.width = '408px'
+  objectiveLabel.height = '20px'
+  objectivePanel.addControl(objectiveLabel)
+
+  const objectiveText = createText('objective-text', '', 18)
+  objectiveText.left = '16px'
+  objectiveText.top = '11px'
+  objectiveText.width = '408px'
+  objectiveText.height = '34px'
+  objectivePanel.addControl(objectiveText)
+
+  const statusPanel = createHudPanel('status-panel', '230px', '146px')
+  statusPanel.left = '-28px'
+  statusPanel.top = '28px'
+  statusPanel.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_RIGHT
+  statusPanel.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP
+  texture.addControl(statusPanel)
+
+  const statusText = createText('aircraft-status', '', 15)
+  statusText.left = '16px'
+  statusText.width = '198px'
+  statusText.height = '112px'
+  statusText.lineSpacing = '9px'
+  statusPanel.addControl(statusText)
+
+  const horizon = new Rectangle('artificial-horizon')
+  horizon.width = '220px'
+  horizon.height = '2px'
+  horizon.background = HUD
+  horizon.color = HUD
+  horizon.thickness = 0
+  horizon.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER
+  horizon.verticalAlignment = Control.VERTICAL_ALIGNMENT_CENTER
+  horizon.shadowColor = '#021013'
+  horizon.shadowBlur = 9
+  texture.addControl(horizon)
+
+  const horizonLeft = createText('horizon-left-mark', '⌟', 30)
+  horizonLeft.width = '44px'
+  horizonLeft.height = '44px'
+  horizonLeft.left = '-74px'
+  horizonLeft.top = '10px'
+  horizonLeft.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER
+  horizonLeft.verticalAlignment = Control.VERTICAL_ALIGNMENT_CENTER
+  horizonLeft.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER
+  texture.addControl(horizonLeft)
+
+  const horizonRight = createText('horizon-right-mark', '⌞', 30)
+  horizonRight.width = '44px'
+  horizonRight.height = '44px'
+  horizonRight.left = '74px'
+  horizonRight.top = '10px'
+  horizonRight.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER
+  horizonRight.verticalAlignment = Control.VERTICAL_ALIGNMENT_CENTER
+  horizonRight.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER
+  texture.addControl(horizonRight)
+
+  const crosshair = createText('flight-crosshair', '·  ─  ◇  ─  ·', 21)
+  crosshair.width = '210px'
+  crosshair.height = '38px'
   crosshair.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER
   crosshair.verticalAlignment = Control.VERTICAL_ALIGNMENT_CENTER
-  crosshair.shadowColor = '#07151d'
-  crosshair.shadowBlur = 7
+  crosshair.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER
   texture.addControl(crosshair)
 
-  const panel = new Rectangle('telemetry-panel')
-  panel.width = '322px'
-  panel.height = '126px'
-  panel.left = '28px'
-  panel.top = '28px'
-  panel.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT
-  panel.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP
-  panel.background = '#07151dd9'
-  panel.color = '#4e727999'
-  panel.cornerRadius = 7
-  panel.thickness = 1
-  texture.addControl(panel)
+  const warning = createText('flight-warning', '', 22, AMBER)
+  warning.width = '520px'
+  warning.height = '44px'
+  warning.top = '142px'
+  warning.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER
+  warning.verticalAlignment = Control.VERTICAL_ALIGNMENT_CENTER
+  warning.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER
+  texture.addControl(warning)
 
-  const title = createText(
-    'map-label',
-    'LEVEL 1  /  KSQL AIRPORT',
-    14,
-    '#58e6df',
-  )
-  title.width = '280px'
-  title.height = '24px'
-  title.left = '18px'
-  title.top = '12px'
-  title.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP
-  panel.addControl(title)
+  const cameraLabel = createText('camera-mode', '', 12, HUD_DIM)
+  cameraLabel.width = '260px'
+  cameraLabel.height = '26px'
+  cameraLabel.left = '-24px'
+  cameraLabel.top = '-22px'
+  cameraLabel.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_RIGHT
+  cameraLabel.verticalAlignment = Control.VERTICAL_ALIGNMENT_BOTTOM
+  cameraLabel.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_RIGHT
+  texture.addControl(cameraLabel)
 
-  const metrics = createText('flight-metrics', '', 17)
-  metrics.width = '286px'
-  metrics.height = '58px'
-  metrics.left = '18px'
-  metrics.top = '42px'
-  metrics.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP
-  metrics.lineSpacing = '8px'
-  panel.addControl(metrics)
-
-  const backend = createText('render-backend', '', 11, '#91adb0')
-  backend.width = '286px'
-  backend.height = '18px'
-  backend.left = '18px'
-  backend.top = '101px'
-  backend.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP
-  panel.addControl(backend)
+  const progress = createText('checkpoint-progress', '', 15)
+  progress.width = '360px'
+  progress.height = '28px'
+  progress.left = '28px'
+  progress.top = '-22px'
+  progress.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT
+  progress.verticalAlignment = Control.VERTICAL_ALIGNMENT_BOTTOM
+  texture.addControl(progress)
 
   const update = (telemetry: LevelOneTelemetry) => {
-    metrics.text = `SPEED  ${telemetry.speed.toFixed(0).padStart(3, '0')} km/h     ALT  ${telemetry.altitude.toFixed(0).padStart(3, '0')} m\nFPS     ${telemetry.fps.toFixed(0).padStart(3, '0')}             SCALE  ${Math.round(telemetry.renderScale * 100)}%`
-    backend.text = `${telemetry.backend.toUpperCase()}  ·  ${telemetry.meshCount} SCENE MESHES`
+    primaryData.text = `SPD  ${telemetry.speed.toFixed(0).padStart(3, '0')} km/h     ALT  ${telemetry.altitude.toFixed(0).padStart(3, '0')} m\nHDG  ${telemetry.heading.toFixed(0).padStart(3, '0')}°          VSI  ${telemetry.verticalSpeed >= 0 ? '+' : ''}${telemetry.verticalSpeed.toFixed(1)} m/s`
+    secondaryData.text = `${telemetry.backend.toUpperCase()}  ·  ${telemetry.fps.toFixed(0)} FPS  ·  ${Math.round(telemetry.renderScale * 100)}%`
+    objectiveText.text = `${telemetry.objective}  ${telemetry.checkpointDistance > 1 ? `// ${telemetry.checkpointDistance.toFixed(0)} m` : ''}`
+    statusText.text = `ENGINE   ${telemetry.engineRunning ? 'ON' : 'OFF'}\nTHROTTLE  ${Math.round(telemetry.throttle * 100).toString().padStart(3, '0')}%\nGEAR      DOWN\nDAMAGE    ${Math.round(telemetry.damage).toString().padStart(3, '0')}%`
+    progress.text = `SCORE  ${telemetry.score.toString().padStart(4, '0')}     RINGS  ${telemetry.checkpointIndex}/${telemetry.checkpointCount}`
+    cameraLabel.text = `${telemetry.cameraMode.toUpperCase()} CAM  //  C TO SWITCH`
+
+    horizon.rotation = (-telemetry.roll * Math.PI) / 180
+    horizon.top = `${Math.max(-86, Math.min(86, telemetry.pitch * 3.2))}px`
+
+    if (telemetry.phase === 'crashed') {
+      warning.text = 'CRITICAL  //  AIRCRAFT LOST'
+      warning.color = RED
+    } else if (telemetry.stalled) {
+      warning.text = 'STALL  //  LOWER NOSE'
+      warning.color = AMBER
+    } else if (telemetry.speed > 245) {
+      warning.text = 'OVERSPEED'
+      warning.color = AMBER
+    } else if (telemetry.phase === 'complete') {
+      warning.text = 'LEVEL COMPLETE'
+      warning.color = HUD
+    } else {
+      warning.text = ''
+    }
   }
 
   update(initialTelemetry)

@@ -10,6 +10,10 @@ export interface LevelOneEngineResult {
   engine: LevelOneEngine
 }
 
+export interface LevelOneEngineOptions {
+  forceWebGl2?: boolean
+}
+
 const ENGINE_OPTIONS = {
   audioEngine: false,
   antialias: true,
@@ -20,13 +24,22 @@ const ENGINE_OPTIONS = {
   stencil: false,
 }
 
+const WEBGPU_ENGINE_OPTIONS = {
+  ...ENGINE_OPTIONS,
+  // Some Vulkan/Wayland drivers cannot import Babylon's multisampled
+  // swap-chain resolve texture. Browser compositing still anti-aliases the
+  // final canvas, while disabling this keeps WebGPU reliable on those GPUs.
+  antialias: false,
+}
+
 /** Prefers WebGPU, but keeps Level 1 available on every WebGL2 desktop. */
 export async function createLevelOneEngine(
   canvas: HTMLCanvasElement,
+  options: LevelOneEngineOptions = {},
 ): Promise<LevelOneEngineResult> {
   try {
-    if (await WebGPUEngine.IsSupportedAsync) {
-      const webGpuEngine = new WebGPUEngine(canvas, ENGINE_OPTIONS)
+    if (!options.forceWebGl2 && (await WebGPUEngine.IsSupportedAsync)) {
+      const webGpuEngine = new WebGPUEngine(canvas, WEBGPU_ENGINE_OPTIONS)
       await webGpuEngine.initAsync()
       return { backend: 'webgpu', engine: webGpuEngine }
     }
