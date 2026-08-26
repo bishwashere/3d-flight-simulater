@@ -5,6 +5,10 @@ import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js'
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 
+import {
+  GAME_LEVELS,
+  type GameLevelCheckpointPosition,
+} from '../../config/game-levels'
 import type { GeometricWorldMaterials } from './geometric-world-materials'
 import type {
   GeometricCheckpoint,
@@ -15,17 +19,11 @@ import type {
 
 const LAND_HEIGHT = 2
 
-export const GEOMETRIC_CHECKPOINT_POSITIONS = [
-  new Vector3(-610, 55, 360),
-  new Vector3(-365, 102, 620),
-  new Vector3(130, 145, 710),
-  new Vector3(610, 158, 600),
-  new Vector3(720, 122, 285),
-  new Vector3(745, 94, -145),
-  new Vector3(455, 80, -505),
-  new Vector3(10, 66, -725),
-  new Vector3(-610, 46, -760),
-] as const
+const DEFAULT_CHECKPOINT_POSITIONS = GAME_LEVELS[0].checkpointPositions
+
+export const GEOMETRIC_CHECKPOINT_POSITIONS = DEFAULT_CHECKPOINT_POSITIONS.map(
+  ([x, y, z]) => new Vector3(x, y, z),
+)
 
 export interface GeometricCourseContext {
   materials: GeometricWorldMaterials
@@ -33,6 +31,12 @@ export interface GeometricCourseContext {
   root: TransformNode
   scene: Scene
   shadowGenerator?: ShadowGenerator
+}
+
+export interface GeometricCheckpointCourseOptions {
+  checkpointPositions?: readonly GameLevelCheckpointPosition[]
+  /** Zero-based checkpoint index surrounded by the optional tower gate. */
+  towerGateCheckpointIndex?: number
 }
 
 export interface GeometricBobbingNode {
@@ -277,26 +281,39 @@ function createCheckpoint(
 
 export function createGeometricCheckpoints(
   context: GeometricCourseContext,
+  options: GeometricCheckpointCourseOptions = {},
 ): GeometricCheckpoint[] {
-  const checkpoints = GEOMETRIC_CHECKPOINT_POSITIONS.map((position, index) => {
-    const previous =
-      GEOMETRIC_CHECKPOINT_POSITIONS[Math.max(0, index - 1)] ?? position
-    const next =
-      GEOMETRIC_CHECKPOINT_POSITIONS[
-        Math.min(GEOMETRIC_CHECKPOINT_POSITIONS.length - 1, index + 1)
-      ] ?? position
-    return createCheckpoint(context, index, position, next.subtract(previous))
+  const requestedPositions = options.checkpointPositions
+  const checkpointPositions =
+    requestedPositions &&
+    requestedPositions.length > 0 &&
+    requestedPositions.every((position) => position.every(Number.isFinite))
+      ? requestedPositions
+      : DEFAULT_CHECKPOINT_POSITIONS
+  const positions = checkpointPositions.map(
+    ([x, y, z]) => new Vector3(x, y, z),
+  )
+  const checkpoints = positions.map((position, index) => {
+    const previous = positions[Math.max(0, index - 1)] ?? position
+    const next = positions[Math.min(positions.length - 1, index + 1)] ?? position
+    const direction = next.subtract(previous)
+    if (direction.lengthSquared() < 0.0001) {
+      direction.copyFromFloats(0, 0, 1)
+    }
+    return createCheckpoint(context, index, position, direction)
   })
 
-  const gatePosition = GEOMETRIC_CHECKPOINT_POSITIONS[3]
-  const gatePrevious = GEOMETRIC_CHECKPOINT_POSITIONS[2]
-  const gateNext = GEOMETRIC_CHECKPOINT_POSITIONS[4]
-  if (gatePosition && gatePrevious && gateNext) {
-    createCourseTowerGate(
-      context,
-      gatePosition,
-      gateNext.subtract(gatePrevious),
-    )
+  const gateIndex = options.towerGateCheckpointIndex
+  const gatePosition = gateIndex === undefined ? undefined : positions[gateIndex]
+  if (gateIndex !== undefined && Number.isInteger(gateIndex) && gatePosition) {
+    const gatePrevious = positions[Math.max(0, gateIndex - 1)] ?? gatePosition
+    const gateNext =
+      positions[Math.min(positions.length - 1, gateIndex + 1)] ?? gatePosition
+    const gateDirection = gateNext.subtract(gatePrevious)
+    if (gateDirection.lengthSquared() < 0.0001) {
+      gateDirection.copyFromFloats(0, 0, 1)
+    }
+    createCourseTowerGate(context, gatePosition, gateDirection)
   }
   return checkpoints
 }

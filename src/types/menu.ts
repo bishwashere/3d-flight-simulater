@@ -1,3 +1,5 @@
+import type { GameLevelId } from '../config/game-levels'
+
 export type MenuPanelId = 'controls' | 'credits' | 'levels' | 'settings'
 
-export type LevelId = 'level-1'
+export type LevelId = GameLevelId

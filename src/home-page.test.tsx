@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { AppRoutes } from './app-router'
-import { useSettingsStore } from './state'
+import { useProgressionStore, useSettingsStore } from './state'
 
 function renderLauncher(initialPath = '/') {
   return render(
@@ -15,6 +15,7 @@ function renderLauncher(initialPath = '/') {
 describe('home menu', () => {
   beforeEach(() => {
     localStorage.clear()
+    useProgressionStore.getState().resetProgression()
     useSettingsStore.getState().resetSettings()
   })
 
@@ -32,7 +33,7 @@ describe('home menu', () => {
     ).toBeEnabled()
   })
 
-  it('opens level selection with only level one available', () => {
+  it('opens level selection with only level one unlocked', () => {
     renderLauncher()
 
     fireEvent.click(screen.getByRole('button', { name: /start game/i }))
@@ -41,10 +42,30 @@ describe('home menu', () => {
       screen.getByRole('dialog', { name: 'Select level' }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /open map/i }),
+      screen.getByRole('button', { name: /level 1: first flight/i }),
     ).toBeEnabled()
-    expect(screen.getByRole('button', { name: /level 2/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /level 3/i })).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: /locked level 2: island bend/i }),
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: /locked level 3: coastal circuit/i }),
+    ).toBeDisabled()
+  })
+
+  it('shows completion, best score, and the newly unlocked level', () => {
+    useProgressionStore.getState().completeLevel('level-1', 1450)
+    renderLauncher('/play')
+
+    const levelOne = screen.getByRole('button', {
+      name: /level 1: first flight/i,
+    })
+    const levelTwo = screen.getByRole('button', {
+      name: /level 2: island bend/i,
+    })
+
+    expect(within(levelOne).getByText('Complete')).toBeInTheDocument()
+    expect(within(levelOne).getByText('Best 1450')).toBeInTheDocument()
+    expect(levelTwo).toBeEnabled()
   })
 
   it('updates sound settings and closes panels with Escape', () => {

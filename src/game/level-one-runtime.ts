@@ -3,6 +3,7 @@ import type { WebGPUEngine } from '@babylonjs/core/Engines/webgpuEngine.js'
 import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js'
 import { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 
+import type { GameLevelDefinition } from '../config/game-levels'
 import { createLevelOneEngine } from './create-level-one-engine'
 import type { LevelOneEngine } from './create-level-one-engine'
 import { createLevelOneScene } from './create-level-one-scene'
@@ -35,6 +36,7 @@ import {
 export interface LevelOneRuntimeOptions {
   assets: LevelOneAssets
   forceWebGl2?: boolean
+  level: GameLevelDefinition
   masterVolume?: number
   onBackendFailure?: () => void
   onGameStatus?: (status: LevelOneGameStatus) => void
@@ -171,6 +173,7 @@ export class LevelOneRuntime {
         engine,
         options.performance,
         options.assets,
+        options.level,
       )
       const camera = new FreeCamera(
         'level-one-flight-camera',
@@ -190,7 +193,7 @@ export class LevelOneRuntime {
         coinCount: world.coins.length,
         meshCount: world.scene.meshes.length,
       }
-      const hud = createLevelOneHud(world.scene, initialTelemetry)
+      const hud = createLevelOneHud(world.scene, initialTelemetry, options.level)
       return new LevelOneRuntime(
         canvas,
         engine,

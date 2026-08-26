@@ -840,7 +840,7 @@ export function createGeometricWorld(
 ): GeometricWorld {
   const quality = options.quality ?? 'high'
   const root = new TransformNode('geometric-world-root', scene)
-  const materials = createGeometricWorldMaterials(scene)
+  const materials = createGeometricWorldMaterials(scene, options.theme ?? 'cyan')
   const obstacles: GeometricObstacleCollider[] = []
   const context: WorldBuildContext = {
     materials,
@@ -861,7 +861,10 @@ export function createGeometricWorld(
     options.vegetationCount ?? (quality === 'high' ? 90 : quality === 'medium' ? 62 : 36),
   )
   const balloons = createGeometricBalloons(context)
-  const checkpoints = createGeometricCheckpoints(context)
+  const checkpoints = createGeometricCheckpoints(context, {
+    checkpointPositions: options.checkpointPositions,
+    towerGateCheckpointIndex: options.towerGateCheckpointIndex,
+  })
   const coins = createGeometricCoins(context)
   const cloudLayer = createGeometricClouds(context, quality)
   const aircraft = createGeometricAircraft(scene, materials, options.shadowGenerator)

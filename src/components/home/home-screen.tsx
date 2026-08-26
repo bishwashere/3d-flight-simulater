@@ -2,9 +2,9 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   getMenuPanelFromPath,
   HOME_PATH,
-  LEVEL_ONE_PATH,
   PANEL_PATHS,
 } from '../../config/menu-routes'
+import { getLevelPath } from '../../config/game-levels'
 import { useMenuAudio } from '../../hooks/use-menu-audio'
 import type { MenuPanelId } from '../../types/menu'
 import { MenuPanelHost } from '../panels/menu-panel-host'
@@ -57,7 +57,7 @@ export function HomeScreen() {
         activePanel={activePanel}
         audio={audio}
         onClose={closePanel}
-        onLaunchLevel={() => void navigate(LEVEL_ONE_PATH)}
+        onLaunchLevel={(levelId) => void navigate(getLevelPath(levelId))}
       />
       <Outlet />
     </main>
