@@ -1,11 +1,21 @@
 # Coastal Flight Simulator
 
 Desktop-first geometric flight game built with React, TypeScript, Tailwind CSS,
-Zustand, and Babylon.js. Level 1 is a compact coastal training course: start on
-the runway, fly through the ordered checkpoint rings, and return for a safe
-landing.
+Zustand, and Babylon.js. Start on the runway, fly through each level's ordered
+checkpoint rings, and return for a safe landing.
 
-## Level 1
+## Levels
+
+- **Level 1 — First Flight:** three straight gates for takeoff and landing
+- **Level 2 — Island Bend:** six gates with a gentle climbing turn
+- **Level 3 — Coastal Circuit:** nine gates, sharper turns, and a tower gate
+
+Only Level 1 starts unlocked. Completing a safe landing unlocks the next level;
+completion and best scores are saved locally. The same geometric island is used
+throughout, with cyan, amber, and violet HUD/checkpoint themes distinguishing the
+three routes.
+
+## Gameplay
 
 - Procedural island, airport, runway, hills, water, obstacles, and aircraft made
   from Babylon.js primitives
@@ -21,7 +31,7 @@ landing.
 - Low, Medium, and High performance presets persisted with Zustand and validated
   with Zod
 
-No map service, API key, runtime CDN, or external Level 1 art/audio asset is
+No map service, API key, runtime CDN, or external gameplay art/audio asset is
 required.
 
 ## Controls
@@ -38,10 +48,10 @@ required.
 | R | Reset flight |
 | P / Escape | Pause / resume |
 
-Fly through every ring in order. After the final checkpoint, follow the runway
-guidance, touch down gently inside the marked landing zone, and slow to complete
-the level. A hard impact or obstacle collision crashes the aircraft; reset to
-retry cleanly.
+Choose a level from **Start Game**. Fly through every ring in order. After the
+final checkpoint, follow the runway guidance, touch down gently inside the
+marked landing zone, and slow to complete the level. A hard impact or obstacle
+collision crashes the aircraft; reset to retry cleanly.
 
 Coins are optional exploration rewards worth 25 points each. While genuinely
 airborne, the aircraft also earns one point every three seconds. Airtime pauses
@@ -77,7 +87,7 @@ src/
 │   ├── level-one-hud.ts           # Babylon GUI instruments and guidance
 │   └── level-one-runtime.ts       # 120 Hz loop, cameras, state, and telemetry
 ├── hooks/                         # React adapters for reusable services
-├── state/                         # Zod-validated Zustand settings
+├── state/                         # Zod-validated Zustand settings/progression
 └── app-router.tsx                 # Route-backed menus and lazy game boundary
 ```
 
@@ -88,12 +98,12 @@ frame.
 
 ## Assets and licenses
 
-- Level 1 geometry, materials, effects, and audio are generated at runtime; no
-  third-party Level 1 art or sound files are used.
+- Gameplay geometry, materials, effects, and audio are generated at runtime; no
+  third-party gameplay art or sound files are used.
 - Google Sans Flex via Fontsource: SIL Open Font License 1.1.
 - Lucide icons: ISC, with Feather-derived icons under MIT terms.
 - Menu key art was generated specifically for this project with OpenAI image
   generation.
 
 See [`public/assets/world/ASSET-SOURCES.md`](public/assets/world/ASSET-SOURCES.md)
-for the Level 1 asset policy.
+for the gameplay asset policy.

@@ -7,6 +7,7 @@ import { Control } from '@babylonjs/gui/2D/controls/control.js'
 import { Rectangle } from '@babylonjs/gui/2D/controls/rectangle.js'
 import { TextBlock } from '@babylonjs/gui/2D/controls/textBlock.js'
 
+import type { GameLevelDefinition, GameLevelTheme } from '../config/game-levels'
 import type { LevelOneTelemetry } from './level-one-types'
 
 export interface LevelOneHud {
@@ -15,10 +16,28 @@ export interface LevelOneHud {
   update: (telemetry: LevelOneTelemetry) => void
 }
 
-const HUD = '#8fffe7'
-const HUD_DIM = '#6fd3c5'
 const AMBER = '#ffc66d'
 const RED = '#ff665f'
+
+const HUD_THEMES: Readonly<
+  Record<GameLevelTheme, { border: string; dim: string; primary: string }>
+> = {
+  amber: {
+    border: '#f1b95866',
+    dim: '#d9ad67',
+    primary: '#ffd37a',
+  },
+  cyan: {
+    border: '#67dacc66',
+    dim: '#6fd3c5',
+    primary: '#8fffe7',
+  },
+  violet: {
+    border: '#bb86ee66',
+    dim: '#b994d7',
+    primary: '#d8afff',
+  },
+}
 
 function formatFlightTime(totalSeconds: number): string {
   const safeSeconds = Math.max(0, Math.floor(totalSeconds))
@@ -31,7 +50,7 @@ function createText(
   name: string,
   text: string,
   fontSize: number,
-  color = HUD,
+  color: string,
 ): TextBlock {
   const control = new TextBlock(name, text)
   control.color = color
@@ -50,12 +69,13 @@ function createHudPanel(
   name: string,
   width: string,
   height: string,
+  borderColor: string,
 ): Rectangle {
   const panel = new Rectangle(name)
   panel.width = width
   panel.height = height
   panel.background = '#03151acc'
-  panel.color = '#67dacc66'
+  panel.color = borderColor
   panel.thickness = 1
   panel.cornerRadius = 3
   return panel
@@ -64,7 +84,18 @@ function createHudPanel(
 export function createLevelOneHud(
   scene: Scene,
   initialTelemetry: LevelOneTelemetry,
+  level: GameLevelDefinition,
 ): LevelOneHud {
+  const theme = HUD_THEMES[level.theme]
+  const themedText = (
+    name: string,
+    text: string,
+    fontSize: number,
+    color = theme.primary,
+  ) => createText(name, text, fontSize, color)
+  const themedPanel = (name: string, width: string, height: string) =>
+    createHudPanel(name, width, height, theme.border)
+
   const texture = AdvancedDynamicTexture.CreateFullscreenUI(
     'level-one-flight-hud',
     true,
@@ -73,21 +104,25 @@ export function createLevelOneHud(
   texture.idealWidth = 1_920
   texture.renderAtIdealSize = true
 
-  const flightPanel = createHudPanel('flight-data-panel', '306px', '146px')
+  const flightPanel = themedPanel('flight-data-panel', '306px', '146px')
   flightPanel.left = '28px'
   flightPanel.top = '28px'
   flightPanel.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT
   flightPanel.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP
   texture.addControl(flightPanel)
 
-  const levelLabel = createText('level-label', 'LEVEL 1  //  ISLAND RUN', 13)
+  const levelLabel = themedText(
+    'level-label',
+    `LEVEL ${level.number}  //  ${level.name.toUpperCase()}`,
+    13,
+  )
   levelLabel.left = '17px'
   levelLabel.top = '-54px'
   levelLabel.width = '270px'
   levelLabel.height = '24px'
   flightPanel.addControl(levelLabel)
 
-  const primaryData = createText('primary-flight-data', '', 20)
+  const primaryData = themedText('primary-flight-data', '', 20)
   primaryData.left = '17px'
   primaryData.top = '-4px'
   primaryData.width = '276px'
@@ -95,45 +130,46 @@ export function createLevelOneHud(
   primaryData.lineSpacing = '10px'
   flightPanel.addControl(primaryData)
 
-  const secondaryData = createText('secondary-flight-data', '', 12, HUD_DIM)
+  const secondaryData = themedText('secondary-flight-data', '', 12, theme.dim)
   secondaryData.left = '17px'
   secondaryData.top = '49px'
   secondaryData.width = '276px'
   secondaryData.height = '27px'
   flightPanel.addControl(secondaryData)
 
-  const objectivePanel = createHudPanel(
-    'objective-panel',
-    '440px',
-    '80px',
-  )
+  const objectivePanel = themedPanel('objective-panel', '440px', '80px')
   objectivePanel.top = '28px'
   objectivePanel.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER
   objectivePanel.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP
   texture.addControl(objectivePanel)
 
-  const objectiveLabel = createText('objective-label', 'OBJECTIVE', 11, HUD_DIM)
+  const objectiveLabel = themedText(
+    'objective-label',
+    'OBJECTIVE',
+    11,
+    theme.dim,
+  )
   objectiveLabel.left = '16px'
   objectiveLabel.top = '-21px'
   objectiveLabel.width = '408px'
   objectiveLabel.height = '20px'
   objectivePanel.addControl(objectiveLabel)
 
-  const objectiveText = createText('objective-text', '', 18)
+  const objectiveText = themedText('objective-text', '', 18)
   objectiveText.left = '16px'
   objectiveText.top = '11px'
   objectiveText.width = '408px'
   objectiveText.height = '34px'
   objectivePanel.addControl(objectiveText)
 
-  const statusPanel = createHudPanel('status-panel', '230px', '146px')
+  const statusPanel = themedPanel('status-panel', '230px', '146px')
   statusPanel.left = '-28px'
   statusPanel.top = '28px'
   statusPanel.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_RIGHT
   statusPanel.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP
   texture.addControl(statusPanel)
 
-  const statusText = createText('aircraft-status', '', 15)
+  const statusText = themedText('aircraft-status', '', 15)
   statusText.left = '16px'
   statusText.width = '198px'
   statusText.height = '112px'
@@ -143,8 +179,8 @@ export function createLevelOneHud(
   const horizon = new Rectangle('artificial-horizon')
   horizon.width = '220px'
   horizon.height = '2px'
-  horizon.background = HUD
-  horizon.color = HUD
+  horizon.background = theme.primary
+  horizon.color = theme.primary
   horizon.thickness = 0
   horizon.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER
   horizon.verticalAlignment = Control.VERTICAL_ALIGNMENT_CENTER
@@ -152,7 +188,7 @@ export function createLevelOneHud(
   horizon.shadowBlur = 9
   texture.addControl(horizon)
 
-  const horizonLeft = createText('horizon-left-mark', '⌟', 30)
+  const horizonLeft = themedText('horizon-left-mark', '⌟', 30)
   horizonLeft.width = '44px'
   horizonLeft.height = '44px'
   horizonLeft.left = '-74px'
@@ -162,7 +198,7 @@ export function createLevelOneHud(
   horizonLeft.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER
   texture.addControl(horizonLeft)
 
-  const horizonRight = createText('horizon-right-mark', '⌞', 30)
+  const horizonRight = themedText('horizon-right-mark', '⌞', 30)
   horizonRight.width = '44px'
   horizonRight.height = '44px'
   horizonRight.left = '74px'
@@ -172,7 +208,7 @@ export function createLevelOneHud(
   horizonRight.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER
   texture.addControl(horizonRight)
 
-  const crosshair = createText('flight-crosshair', '·  ─  ◇  ─  ·', 21)
+  const crosshair = themedText('flight-crosshair', '·  ─  ◇  ─  ·', 21)
   crosshair.width = '210px'
   crosshair.height = '38px'
   crosshair.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER
@@ -180,7 +216,7 @@ export function createLevelOneHud(
   crosshair.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER
   texture.addControl(crosshair)
 
-  const warning = createText('flight-warning', '', 22, AMBER)
+  const warning = themedText('flight-warning', '', 22, AMBER)
   warning.width = '520px'
   warning.height = '44px'
   warning.top = '142px'
@@ -189,7 +225,7 @@ export function createLevelOneHud(
   warning.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER
   texture.addControl(warning)
 
-  const cameraLabel = createText('camera-mode', '', 12, HUD_DIM)
+  const cameraLabel = themedText('camera-mode', '', 12, theme.dim)
   cameraLabel.width = '260px'
   cameraLabel.height = '26px'
   cameraLabel.left = '-24px'
@@ -199,7 +235,7 @@ export function createLevelOneHud(
   cameraLabel.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_RIGHT
   texture.addControl(cameraLabel)
 
-  const progress = createText('checkpoint-progress', '', 15)
+  const progress = themedText('checkpoint-progress', '', 15)
   progress.width = '680px'
   progress.height = '28px'
   progress.left = '28px'
@@ -230,7 +266,7 @@ export function createLevelOneHud(
       warning.color = AMBER
     } else if (telemetry.phase === 'complete') {
       warning.text = 'LEVEL COMPLETE'
-      warning.color = HUD
+      warning.color = theme.primary
     } else {
       warning.text = ''
     }

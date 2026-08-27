@@ -1,7 +1,8 @@
-import { LogOut, Pause, Play, RotateCcw } from 'lucide-react'
+import { ArrowRight, LogOut, Pause, Play, RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useHotkeys, useKeyHold } from '@tanstack/react-hotkeys'
 
+import type { GameLevelDefinition } from '../../config/game-levels'
 import { LevelOneRuntime } from '../../game/level-one-runtime'
 import { resolveLevelOnePerformance } from '../../game/level-one-performance'
 import {
@@ -13,8 +14,11 @@ import {
 
 export interface LevelOneScreenProps {
   assets?: LevelOneAssets
+  level: GameLevelDefinition
   masterVolume?: number
+  onComplete: (score: number) => void
   onExit: () => void
+  onNextLevel?: () => void
   performance?: LevelOnePerformanceSettings
   pointerYoke?: boolean
 }
@@ -46,12 +50,16 @@ function rememberWebGpuFailure(): void {
 
 export function LevelOneScreen({
   assets,
+  level,
   masterVolume = 0.7,
+  onComplete,
   onExit,
+  onNextLevel,
   performance,
   pointerYoke = false,
 }: LevelOneScreenProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const completionReportedRef = useRef(false)
   const runtimeRef = useRef<LevelOneRuntime | null>(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [forceWebGl2, setForceWebGl2] = useState(
@@ -111,6 +119,18 @@ export function LevelOneScreen({
   )
 
   useEffect(() => {
+    if (gameStatus.phase !== 'complete') {
+      completionReportedRef.current = false
+      return
+    }
+    if (completionReportedRef.current) {
+      return
+    }
+    completionReportedRef.current = true
+    onComplete(gameStatus.score)
+  }, [gameStatus.phase, gameStatus.score, onComplete])
+
+  useEffect(() => {
     runtimeRef.current?.setControlInput({
       brakes: brakesHeld,
       pitch: Number(pitchUpHeld) - Number(pitchDownHeld),
@@ -142,6 +162,8 @@ export function LevelOneScreen({
     setErrorMessage('')
     setPaused(false)
     setGameStatus(INITIAL_GAME_STATUS)
+    canvas.dataset.level = level.id
+    canvas.dataset.theme = level.theme
 
     const initialize = async () => {
       // React Strict Mode mounts, cleans up, then mounts effects again in
@@ -158,6 +180,7 @@ export function LevelOneScreen({
         const runtime = await LevelOneRuntime.create(canvas, {
           assets: resolvedAssets,
           forceWebGl2,
+          level,
           masterVolume,
           onBackendFailure: () => {
             if (!cancelled) {
@@ -178,6 +201,8 @@ export function LevelOneScreen({
             canvas.dataset.airborneSeconds = telemetry.airborneSeconds.toFixed(1)
             canvas.dataset.coinsCollected = telemetry.coinsCollected.toString()
             canvas.dataset.coinCount = telemetry.coinCount.toString()
+            canvas.dataset.checkpointCount = telemetry.checkpointCount.toString()
+            canvas.dataset.checkpointIndex = telemetry.checkpointIndex.toString()
             canvas.dataset.speed = telemetry.speed.toFixed(1)
           },
           performance: resolvedPerformance,
@@ -194,11 +219,11 @@ export function LevelOneScreen({
         canvas.focus()
       } catch (error) {
         if (!cancelled) {
-          console.error('Level 1 startup failed.', error)
+          console.error(`Level ${level.number} startup failed.`, error)
           setErrorMessage(
             error instanceof Error
               ? error.message
-              : 'The Level 1 renderer could not start.',
+              : `The Level ${level.number} renderer could not start.`,
           )
           setStatus('error')
         }
@@ -214,6 +239,7 @@ export function LevelOneScreen({
     }
   }, [
     forceWebGl2,
+    level,
     masterVolume,
     pointerYoke,
     resolvedAssets,
@@ -264,9 +290,9 @@ export function LevelOneScreen({
   return (
     <main className="fixed inset-0 isolate overflow-hidden bg-flight-950 text-flight-100">
       <canvas
-        key={forceWebGl2 ? 'webgl2-canvas' : 'automatic-canvas'}
+        key={`${level.id}-${forceWebGl2 ? 'webgl2-canvas' : 'automatic-canvas'}`}
         ref={canvasRef}
-        aria-label="Level 1 geometric island flight course"
+        aria-label={`Level ${level.number} ${level.name} flight course`}
         className="block h-full w-full cursor-crosshair outline-none"
         onClick={() => {
           if (pointerYoke) {
@@ -281,7 +307,7 @@ export function LevelOneScreen({
           <div className="flex flex-col items-center gap-4 text-center">
             <span className="size-9 animate-spin rounded-full border-2 border-flight-700 border-t-hud" />
             <p className="text-sm font-semibold tracking-[0.2em] text-hud">
-              BUILDING ISLAND RUN
+              BUILDING {level.name.toUpperCase()}
             </p>
           </div>
         </div>
@@ -293,7 +319,9 @@ export function LevelOneScreen({
             <p className="text-xs font-semibold tracking-[0.18em] text-critical">
               RENDERER UNAVAILABLE
             </p>
-            <h1 className="mt-3 text-2xl font-semibold">Level 1 could not start</h1>
+            <h1 className="mt-3 text-2xl font-semibold">
+              Level {level.number} could not start
+            </h1>
             <p className="mt-3 text-sm leading-6 text-flight-300">
               {errorMessage}
             </p>
@@ -319,7 +347,7 @@ export function LevelOneScreen({
 
       {status === 'ready' && !paused ? (
         <button
-          aria-label="Pause Level 1"
+          aria-label={`Pause Level ${level.number}`}
           className="absolute right-6 top-6 grid size-11 place-items-center rounded-md border border-flight-500/40 bg-flight-950/65 text-flight-100 backdrop-blur hover:border-hud/60 hover:text-hud"
           onClick={() => runtimeRef.current?.setPaused(true)}
           type="button"
@@ -357,7 +385,7 @@ export function LevelOneScreen({
             role="dialog"
           >
             <p className="text-xs font-semibold tracking-[0.2em] text-hud">
-              LEVEL 1
+              LEVEL {level.number}
             </p>
             <h1 id="level-one-paused-title" className="mt-2 text-3xl font-semibold">
               Paused
@@ -414,9 +442,20 @@ export function LevelOneScreen({
             <p className="text-xs font-bold tracking-[0.22em] text-ready">
               RUN COMPLETE
             </p>
-            <h1 className="mt-2 text-4xl font-semibold">Level 1 cleared</h1>
+            <h1 className="mt-2 text-4xl font-semibold">
+              Level {level.number} cleared
+            </h1>
             <p className="mt-3 text-lg text-hud">{gameStatus.score} points</p>
             <div className="mt-7 grid grid-cols-2 gap-3">
+              {onNextLevel ? (
+                <button
+                  className="col-span-2 flex items-center justify-center gap-2 rounded-md bg-ready px-4 py-3 font-bold text-flight-950 hover:brightness-110"
+                  onClick={onNextLevel}
+                  type="button"
+                >
+                  Next level <ArrowRight aria-hidden="true" size={18} />
+                </button>
+              ) : null}
               <button
                 className="rounded-md bg-hud px-4 py-3 font-bold text-flight-950 hover:bg-hud-bright"
                 onClick={restart}

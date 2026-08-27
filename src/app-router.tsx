@@ -7,15 +7,15 @@ import {
 } from 'react-router-dom'
 import { HomeScreen } from './components/home/home-screen'
 import {
+  GAME_LEVEL_PATH,
   HOME_PATH,
-  LEVEL_ONE_PATH,
   PANEL_PATHS,
 } from './config/menu-routes'
 import { useGameAmbience } from './hooks/use-game-ambience'
 
-const LevelOneRoute = lazy(() =>
-  import('./components/game/level-one-route').then((module) => ({
-    default: module.LevelOneRoute,
+const LevelRoute = lazy(() =>
+  import('./components/game/level-route').then((module) => ({
+    default: module.LevelRoute,
   })),
 )
 
@@ -28,7 +28,7 @@ function LevelRouteFallback() {
     <main className="fixed inset-0 grid place-items-center bg-flight-950 text-flight-100">
       <div className="flex items-center gap-3 text-sm font-semibold tracking-[0.18em] text-hud">
         <span className="size-4 animate-spin rounded-full border-2 border-flight-700 border-t-hud" />
-        LOADING LEVEL 1
+        LOADING FLIGHT
       </div>
     </main>
   )
@@ -44,10 +44,10 @@ export function AppRoutes() {
         ))}
       </Route>
       <Route
-        path={LEVEL_ONE_PATH}
+        path={GAME_LEVEL_PATH}
         element={
           <Suspense fallback={<LevelRouteFallback />}>
-            <LevelOneRoute />
+            <LevelRoute />
           </Suspense>
         }
       />

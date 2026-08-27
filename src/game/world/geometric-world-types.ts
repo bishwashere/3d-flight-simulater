@@ -3,6 +3,11 @@ import type { TransformNode } from '@babylonjs/core/Meshes/transformNode.js'
 import type { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 
+import type {
+  GameLevelCheckpointPosition,
+  GameLevelTheme,
+} from '../../config/game-levels'
+
 export type GeometricWorldQuality = 'low' | 'medium' | 'high'
 
 export type GeometricCheckpointState = 'active' | 'collected' | 'pending'
@@ -16,8 +21,12 @@ export type GeometricObstacleKind =
   | 'tower'
 
 export interface GeometricWorldOptions {
+  checkpointPositions?: readonly GameLevelCheckpointPosition[]
   quality?: GeometricWorldQuality
   shadowGenerator?: ShadowGenerator
+  theme?: GameLevelTheme
+  /** Zero-based checkpoint index surrounded by the optional tower gate. */
+  towerGateCheckpointIndex?: number
   vegetationCount?: number
 }
 
