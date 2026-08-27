@@ -85,6 +85,43 @@ describe('LevelOneCourse', () => {
     })
   })
 
+  it('force-completes with remaining checkpoint and landing points', () => {
+    const course = new LevelOneCourse(checkpoints)
+
+    expect(course.forceComplete()).toEqual({ score: 900, type: 'complete' })
+    expect(course.getSnapshot({ x: 0, y: 0, z: 0 })).toMatchObject({
+      checkpointIndex: checkpoints.length,
+      phase: 'complete',
+      score: 900,
+    })
+    expect(course.forceComplete()).toBeUndefined()
+  })
+
+  it('preserves earned points when force-completing after a crash', () => {
+    const course = new LevelOneCourse(checkpoints)
+    course.start()
+    course.collectCoin('coin-a')
+    course.update({
+      airborne: true,
+      deltaSeconds: 3,
+      insideLandingZone: false,
+      onGround: false,
+      position: checkpoints[0].position,
+      speed: 40,
+      verticalSpeed: 0,
+    })
+    course.crash()
+    const scoreBeforeCheat = course.getSnapshot({ x: 0, y: 0, z: 0 }).score
+
+    const completion = course.forceComplete()
+    expect(completion).toEqual({ score: scoreBeforeCheat + 750, type: 'complete' })
+    expect(course.getSnapshot({ x: 0, y: 0, z: 0 })).toMatchObject({
+      checkpointIndex: checkpoints.length,
+      phase: 'complete',
+      score: completion?.score,
+    })
+  })
+
   it('awards one point for each three accumulated airborne seconds', () => {
     const course = new LevelOneCourse(checkpoints)
     course.start()

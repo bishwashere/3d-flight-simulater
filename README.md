@@ -47,6 +47,7 @@ required.
 | C | Switch cockpit / chase camera |
 | R | Reset flight |
 | P / Escape | Pause / resume |
+| L | Complete the active level (cheat) |
 
 Choose a level from **Start Game**. Fly through every ring in order. After the
 final checkpoint, follow the runway guidance, touch down gently inside the

@@ -14,7 +14,10 @@ import {
   type AircraftSimulationState,
 } from './flight/aircraft-simulation'
 import { createLevelOneAudio, type LevelOneAudio } from './level-one-audio'
-import { LevelOneCourse } from './level-one-course'
+import {
+  LevelOneCourse,
+  type LevelOneCourseEvent,
+} from './level-one-course'
 import { createLevelOneHud, type LevelOneHud } from './level-one-hud'
 import { getInitialPixelRatio } from './level-one-performance'
 import {
@@ -392,6 +395,10 @@ export class LevelOneRuntime {
       verticalSpeed: state.verticalSpeed,
     })
 
+    this.handleCourseEvent(event)
+  }
+
+  private handleCourseEvent(event: LevelOneCourseEvent | undefined): void {
     if (!event) {
       return
     }
@@ -401,6 +408,7 @@ export class LevelOneRuntime {
       this.updateCheckpointVisuals()
     } else if (event.type === 'complete') {
       this.simulation.setThrottle(0)
+      this.updateCheckpointVisuals()
       this.audio.playSuccess()
     }
     this.emitGameStatus(true)
@@ -440,7 +448,11 @@ export class LevelOneRuntime {
   private processCrash(): void {
     const state = this.simulation.state
     const snapshot = this.course.getSnapshot(state.position)
-    if (!state.crashed || snapshot.phase === 'crashed') {
+    if (
+      !state.crashed ||
+      snapshot.phase === 'crashed' ||
+      snapshot.phase === 'complete'
+    ) {
       return
     }
 
@@ -687,6 +699,32 @@ export class LevelOneRuntime {
     this.cameraMode = this.cameraMode === 'chase' ? 'cockpit' : 'chase'
     this.setAircraftVisibility(this.cameraMode === 'chase')
     this.updateCamera(this.simulation.state, 1 / 60, true)
+  }
+
+  completeLevel(): void {
+    const event = this.course.forceComplete()
+    if (!event) {
+      return
+    }
+
+    if (this.paused) {
+      this.setPaused(false)
+    }
+    if (this.simulation.state.crashed) {
+      this.simulation.reset()
+      this.controlInput = { ...EMPTY_LEVEL_ONE_CONTROL_INPUT }
+      this.pointerPitch = 0
+      this.pointerRoll = 0
+      this.cameraMode = 'chase'
+      this.world.clearCrashEffects()
+      this.setAircraftVisibility(true)
+      this.audio.reset()
+      this.syncAircraftVisual(this.simulation.state, 0)
+      this.updateCamera(this.simulation.state, 1 / 60, true)
+      this.lastFrameTime = globalThis.performance.now()
+    }
+
+    this.handleCourseEvent(event)
   }
 
   resetGame(): void {

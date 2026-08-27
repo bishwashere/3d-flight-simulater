@@ -111,6 +111,15 @@ export function LevelOneScreen({
         callback: () => runtimeRef.current?.releasePointerLockOrPause(),
         hotkey: 'Escape',
       },
+      {
+        callback: () => runtimeRef.current?.completeLevel(),
+        hotkey: 'L',
+        options: {
+          ignoreInputs: false,
+          preventDefault: true,
+          requireReset: true,
+        },
+      },
     ],
     {
       enabled: status === 'ready',
