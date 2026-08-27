@@ -407,11 +407,15 @@ export class LevelOneRuntime {
       this.audio.playCheckpoint()
       this.updateCheckpointVisuals()
     } else if (event.type === 'complete') {
+      this.controlInput = { ...EMPTY_LEVEL_ONE_CONTROL_INPUT }
       this.simulation.setThrottle(0)
       this.updateCheckpointVisuals()
       this.audio.playSuccess()
     }
     this.emitGameStatus(true)
+    if (event.type === 'complete') {
+      this.engine.exitPointerlock()
+    }
   }
 
   private processCoinCollection(): void {

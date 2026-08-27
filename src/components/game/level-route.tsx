@@ -76,6 +76,7 @@ export function LevelRoute() {
 
   return (
     <LevelOneScreen
+      key={level.id}
       level={level}
       masterVolume={masterVolume}
       onComplete={handleComplete}

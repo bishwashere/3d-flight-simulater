@@ -1,5 +1,5 @@
 import { ArrowRight, LogOut, Pause, Play, RotateCcw } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useHotkeys, useKeyHold } from '@tanstack/react-hotkeys'
 
 import type { GameLevelDefinition } from '../../config/game-levels'
@@ -11,6 +11,11 @@ import {
   type LevelOneGameStatus,
   type LevelOnePerformanceSettings,
 } from '../../game/level-one-types'
+import {
+  logCompletedRunCheckIn,
+  type PlayerCheckIn,
+} from '../../lib/player-check-in'
+import { PlayerCheckInForm } from './player-check-in-form'
 
 export interface LevelOneScreenProps {
   assets?: LevelOneAssets
@@ -24,6 +29,10 @@ export interface LevelOneScreenProps {
 }
 
 type LoadingStatus = 'error' | 'loading' | 'ready'
+type CompletionCheckIn =
+  | { status: 'pending' }
+  | { status: 'skipped' }
+  | { status: 'submitted'; username: string }
 
 const INITIAL_GAME_STATUS: LevelOneGameStatus = {
   phase: 'ready',
@@ -60,12 +69,15 @@ export function LevelOneScreen({
 }: LevelOneScreenProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const completionReportedRef = useRef(false)
+  const gamePhaseRef = useRef<LevelOneGameStatus['phase']>('ready')
   const runtimeRef = useRef<LevelOneRuntime | null>(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [forceWebGl2, setForceWebGl2] = useState(
     hadWebGpuFailureThisSession,
   )
   const [gameStatus, setGameStatus] = useState(INITIAL_GAME_STATUS)
+  const [completionCheckIn, setCompletionCheckIn] =
+    useState<CompletionCheckIn>({ status: 'pending' })
   const [paused, setPaused] = useState(false)
   const [retryKey, setRetryKey] = useState(0)
   const [status, setStatus] = useState<LoadingStatus>('loading')
@@ -88,6 +100,10 @@ export function LevelOneScreen({
     () => resolveLevelOnePerformance(performance),
     [performance],
   )
+  const updateGameStatus = useCallback((nextStatus: LevelOneGameStatus) => {
+    gamePhaseRef.current = nextStatus.phase
+    setGameStatus(nextStatus)
+  }, [])
 
   useHotkeys(
     [
@@ -122,7 +138,7 @@ export function LevelOneScreen({
       },
     ],
     {
-      enabled: status === 'ready',
+      enabled: status === 'ready' && gameStatus.phase !== 'complete',
       ignoreInputs: false,
     },
   )
@@ -140,6 +156,10 @@ export function LevelOneScreen({
   }, [gameStatus.phase, gameStatus.score, onComplete])
 
   useEffect(() => {
+    if (status !== 'ready' || gameStatus.phase === 'complete') {
+      return
+    }
+
     runtimeRef.current?.setControlInput({
       brakes: brakesHeld,
       pitch: Number(pitchUpHeld) - Number(pitchDownHeld),
@@ -150,12 +170,14 @@ export function LevelOneScreen({
     })
   }, [
     brakesHeld,
+    gameStatus.phase,
     pitchDownHeld,
     pitchUpHeld,
     rollLeftHeld,
     rollRightHeld,
     throttleDownHeld,
     throttleUpHeld,
+    status,
     yawLeftHeld,
     yawRightHeld,
   ])
@@ -170,6 +192,7 @@ export function LevelOneScreen({
     setStatus('loading')
     setErrorMessage('')
     setPaused(false)
+    gamePhaseRef.current = 'ready'
     setGameStatus(INITIAL_GAME_STATUS)
     canvas.dataset.level = level.id
     canvas.dataset.theme = level.theme
@@ -198,7 +221,7 @@ export function LevelOneScreen({
               setRetryKey((value) => value + 1)
             }
           },
-          onGameStatus: setGameStatus,
+          onGameStatus: updateGameStatus,
           onPauseChange: setPaused,
           onTelemetry: (telemetry) => {
             canvas.dataset.altitude = telemetry.altitude.toFixed(1)
@@ -254,10 +277,15 @@ export function LevelOneScreen({
     resolvedAssets,
     resolvedPerformance,
     retryKey,
+    updateGameStatus,
   ])
 
   useEffect(() => {
-    const pauseAfterFocusLoss = () => runtimeRef.current?.setPaused(true)
+    const pauseAfterFocusLoss = () => {
+      if (gamePhaseRef.current !== 'complete') {
+        runtimeRef.current?.setPaused(true)
+      }
+    }
     const pauseWhenHidden = () => {
       if (document.hidden) {
         pauseAfterFocusLoss()
@@ -287,6 +315,7 @@ export function LevelOneScreen({
   }
 
   const restart = () => {
+    setCompletionCheckIn({ status: 'pending' })
     runtimeRef.current?.resetGame()
     runtimeRef.current?.setPaused(false)
   }
@@ -294,6 +323,18 @@ export function LevelOneScreen({
   const exitLevel = () => {
     runtimeRef.current?.setPaused(true)
     onExit()
+  }
+
+  const submitPlayerCheckIn = (checkIn: PlayerCheckIn) => {
+    logCompletedRunCheckIn({
+      ...checkIn,
+      levelId: level.id,
+      score: gameStatus.score,
+    })
+    setCompletionCheckIn({
+      status: 'submitted',
+      username: checkIn.username,
+    })
   }
 
   return (
@@ -447,39 +488,61 @@ export function LevelOneScreen({
 
       {status === 'ready' && gameStatus.phase === 'complete' && !paused ? (
         <div className="absolute inset-0 grid place-items-center bg-flight-950/45 px-6 backdrop-blur-[2px]">
-          <section className="w-full max-w-sm border-l-2 border-ready bg-flight-950/92 p-7 shadow-hud">
+          <section
+            aria-labelledby={`level-${level.number}-complete-title`}
+            aria-modal="true"
+            className="w-full max-w-md border-l-2 border-ready bg-flight-950/92 p-7 shadow-hud"
+            role="dialog"
+          >
             <p className="text-xs font-bold tracking-[0.22em] text-ready">
               RUN COMPLETE
             </p>
-            <h1 className="mt-2 text-4xl font-semibold">
+            <h1
+              className="mt-2 text-4xl font-semibold"
+              id={`level-${level.number}-complete-title`}
+            >
               Level {level.number} cleared
             </h1>
             <p className="mt-3 text-lg text-hud">{gameStatus.score} points</p>
-            <div className="mt-7 grid grid-cols-2 gap-3">
-              {onNextLevel ? (
-                <button
-                  className="col-span-2 flex items-center justify-center gap-2 rounded-md bg-ready px-4 py-3 font-bold text-flight-950 hover:brightness-110"
-                  onClick={onNextLevel}
-                  type="button"
-                >
-                  Next level <ArrowRight aria-hidden="true" size={18} />
-                </button>
-              ) : null}
-              <button
-                className="rounded-md bg-hud px-4 py-3 font-bold text-flight-950 hover:bg-hud-bright"
-                onClick={restart}
-                type="button"
-              >
-                Fly again
-              </button>
-              <button
-                className="rounded-md border border-flight-700 px-4 py-3 font-semibold hover:border-flight-500"
-                onClick={exitLevel}
-                type="button"
-              >
-                Exit
-              </button>
-            </div>
+            {completionCheckIn.status === 'pending' ? (
+              <PlayerCheckInForm
+                onSkip={() => setCompletionCheckIn({ status: 'skipped' })}
+                onSubmit={submitPlayerCheckIn}
+              />
+            ) : (
+              <>
+                {completionCheckIn.status === 'submitted' ? (
+                  <p className="mt-5 border-l border-hud bg-hud/8 px-3 py-2 text-xs tracking-[0.1em] text-hud uppercase">
+                    Pilot logged · {completionCheckIn.username}
+                  </p>
+                ) : null}
+                <div className="mt-7 grid grid-cols-2 gap-3">
+                  {onNextLevel ? (
+                    <button
+                      className="col-span-2 flex items-center justify-center gap-2 rounded-md bg-ready px-4 py-3 font-bold text-flight-950 hover:brightness-110"
+                      onClick={onNextLevel}
+                      type="button"
+                    >
+                      Next level <ArrowRight aria-hidden="true" size={18} />
+                    </button>
+                  ) : null}
+                  <button
+                    className="rounded-md bg-hud px-4 py-3 font-bold text-flight-950 hover:bg-hud-bright"
+                    onClick={restart}
+                    type="button"
+                  >
+                    Fly again
+                  </button>
+                  <button
+                    className="rounded-md border border-flight-700 px-4 py-3 font-semibold hover:border-flight-500"
+                    onClick={exitLevel}
+                    type="button"
+                  >
+                    Exit
+                  </button>
+                </div>
+              </>
+            )}
           </section>
         </div>
       ) : null}

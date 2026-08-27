@@ -54,6 +54,9 @@ final checkpoint, follow the runway guidance, touch down gently inside the
 marked landing zone, and slow to complete the level. A hard impact or obstacle
 collision crashes the aircraft; reset to retry cleanly.
 
+After completion, the optional pilot check-in logs the submitted username,
+email, level, and score to the browser console without persisting them.
+
 Coins are optional exploration rewards worth 25 points each. While genuinely
 airborne, the aircraft also earns one point every three seconds. Airtime pauses
 on the ground, while paused, and after a crash; resetting clears the full score.
