@@ -40,13 +40,14 @@ required.
 | --- | --- |
 | I | Start engine |
 | Shift / Ctrl | Increase / decrease throttle |
-| W / S | Pitch control |
-| A / D | Roll control |
+| W / S or ↑ / ↓ | Pitch control |
+| A / D or ← / → | Roll control |
 | Q / E | Yaw / rudder control |
 | B | Hold brakes |
 | C | Switch cockpit / chase camera |
 | R | Reset flight |
-| P / Escape | Pause / resume |
+| Space / P / Escape | Pause / resume |
+| X | Hide the in-flight controls helper |
 
 Choose a level from **Start Game**. Fly through every ring in order. After the
 final checkpoint, follow the runway guidance, touch down gently inside the

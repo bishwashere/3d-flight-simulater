@@ -12,8 +12,8 @@ export const CONTROL_GROUPS: readonly ControlGroup[] = [
   {
     title: 'Flight controls',
     bindings: [
-      { key: 'W / S', action: 'Pitch down / up' },
-      { key: 'A / D', action: 'Roll left / right' },
+      { key: 'W / S or ↑ / ↓', action: 'Pitch down / up' },
+      { key: 'A / D or ← / →', action: 'Roll left / right' },
       { key: 'Q / E', action: 'Rudder left / right' },
       { key: 'Shift / Ctrl', action: 'Increase / decrease throttle' },
     ],
@@ -30,7 +30,8 @@ export const CONTROL_GROUPS: readonly ControlGroup[] = [
     title: 'View & session',
     bindings: [
       { key: 'C', action: 'Cycle camera' },
-      { key: 'P / Esc', action: 'Pause' },
+      { key: 'Space / P / Esc', action: 'Pause' },
+      { key: 'X', action: 'Hide controls helper' },
       { key: 'Mouse', action: 'Optional pointer yoke' },
     ],
   },

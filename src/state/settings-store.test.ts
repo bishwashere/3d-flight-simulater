@@ -17,12 +17,14 @@ describe('settings store', () => {
     const settings = useSettingsStore.getState()
 
     settings.setMasterVolume(1.5)
+    settings.toggleGameplaySounds()
     settings.setQualityPreset('medium')
     settings.toggleUiSounds()
     settings.toggleMusic()
     settings.togglePointerYoke()
 
     expect(useSettingsStore.getState()).toMatchObject({
+      gameplaySoundsEnabled: false,
       masterVolume: 1,
       musicEnabled: false,
       pointerYokeEnabled: true,
@@ -70,6 +72,7 @@ describe('settings store', () => {
     ) as { state?: Record<string, unknown> }
 
     expect(persisted.state).toMatchObject({
+      gameplaySoundsEnabled: DEFAULT_SETTINGS.gameplaySoundsEnabled,
       masterVolume: 0.42,
       renderDistance: DEFAULT_SETTINGS.renderDistance,
       renderScale: DEFAULT_SETTINGS.renderScale,
@@ -84,6 +87,7 @@ describe('settings store', () => {
     expect(
       settingsSchema.parse({
         adaptiveResolutionEnabled: false,
+        gameplaySoundsEnabled: false,
         masterVolume: 1.75,
         musicEnabled: false,
         pointerYokeEnabled: true,
@@ -96,6 +100,7 @@ describe('settings store', () => {
       }),
     ).toEqual({
       adaptiveResolutionEnabled: false,
+      gameplaySoundsEnabled: false,
       masterVolume: 1,
       musicEnabled: false,
       pointerYokeEnabled: true,
@@ -116,6 +121,7 @@ describe('settings store', () => {
       JSON.stringify({
         state: {
           adaptiveResolutionEnabled: false,
+          gameplaySoundsEnabled: 'yes',
           masterVolume: -2,
           musicEnabled: 'yes',
           pointerYokeEnabled: true,
@@ -134,6 +140,7 @@ describe('settings store', () => {
 
     expect(useSettingsStore.getState()).toMatchObject({
       adaptiveResolutionEnabled: false,
+      gameplaySoundsEnabled: DEFAULT_SETTINGS.gameplaySoundsEnabled,
       masterVolume: 0,
       musicEnabled: DEFAULT_SETTINGS.musicEnabled,
       pointerYokeEnabled: true,

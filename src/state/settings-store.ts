@@ -32,6 +32,7 @@ export type QualityPreset = PerformancePreset | 'custom'
 const DEFAULT_SETTING_VALUES = {
   ...PERFORMANCE_PRESETS.high,
   masterVolume: 0.7,
+  gameplaySoundsEnabled: true,
   musicEnabled: true,
   pointerYokeEnabled: false,
   qualityPreset: 'high' as QualityPreset,
@@ -72,6 +73,9 @@ export const settingsSchema = z
       .boolean()
       .catch(DEFAULT_SETTING_VALUES.adaptiveResolutionEnabled),
     masterVolume: masterVolumeSchema,
+    gameplaySoundsEnabled: z
+      .boolean()
+      .catch(DEFAULT_SETTING_VALUES.gameplaySoundsEnabled),
     musicEnabled: z.boolean().catch(DEFAULT_SETTING_VALUES.musicEnabled),
     pointerYokeEnabled: z
       .boolean()
@@ -94,6 +98,7 @@ export type GameSettings = z.output<typeof settingsSchema>
 interface SettingsActions {
   resetSettings: () => void
   setAdaptiveResolutionEnabled: (enabled: boolean) => void
+  setGameplaySoundsEnabled: (enabled: boolean) => void
   setMasterVolume: (volume: number) => void
   setMusicEnabled: (enabled: boolean) => void
   setPointerYokeEnabled: (enabled: boolean) => void
@@ -104,6 +109,7 @@ interface SettingsActions {
   setUiSoundsEnabled: (enabled: boolean) => void
   setVegetationDensity: (density: number) => void
   toggleAdaptiveResolution: () => void
+  toggleGameplaySounds: () => void
   toggleMusic: () => void
   togglePointerYoke: () => void
   toggleShadows: () => void
@@ -135,6 +141,8 @@ export const useSettingsStore = create<SettingsState>()(
       resetSettings: () => set({ ...DEFAULT_SETTINGS }),
       setAdaptiveResolutionEnabled: (adaptiveResolutionEnabled) =>
         set({ adaptiveResolutionEnabled, qualityPreset: 'custom' }),
+      setGameplaySoundsEnabled: (gameplaySoundsEnabled) =>
+        set({ gameplaySoundsEnabled }),
       setMasterVolume: (masterVolume) =>
         set({ masterVolume: masterVolumeSchema.parse(masterVolume) }),
       setMusicEnabled: (musicEnabled) => set({ musicEnabled }),
@@ -170,6 +178,10 @@ export const useSettingsStore = create<SettingsState>()(
           adaptiveResolutionEnabled: !state.adaptiveResolutionEnabled,
           qualityPreset: 'custom',
         })),
+      toggleGameplaySounds: () =>
+        set((state) => ({
+          gameplaySoundsEnabled: !state.gameplaySoundsEnabled,
+        })),
       toggleMusic: () =>
         set((state) => ({ musicEnabled: !state.musicEnabled })),
       togglePointerYoke: () =>
@@ -188,6 +200,7 @@ export const useSettingsStore = create<SettingsState>()(
       name: SETTINGS_STORAGE_KEY,
       partialize: (state) => ({
         adaptiveResolutionEnabled: state.adaptiveResolutionEnabled,
+        gameplaySoundsEnabled: state.gameplaySoundsEnabled,
         masterVolume: state.masterVolume,
         musicEnabled: state.musicEnabled,
         pointerYokeEnabled: state.pointerYokeEnabled,
