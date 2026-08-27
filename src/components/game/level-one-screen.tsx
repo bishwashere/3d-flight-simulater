@@ -1,7 +1,19 @@
-import { ArrowRight, LogOut, Pause, Play, RotateCcw } from 'lucide-react'
+import {
+  ArrowRight,
+  Keyboard,
+  LogOut,
+  Music,
+  Pause,
+  Play,
+  RotateCcw,
+  Settings,
+  Volume2,
+  VolumeX,
+} from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useHotkeys, useKeyHold } from '@tanstack/react-hotkeys'
+import { useHotkeys } from '@tanstack/react-hotkeys'
 
+import { gameAmbience } from '../../audio/game-ambience'
 import type { GameLevelDefinition } from '../../config/game-levels'
 import { LevelOneRuntime } from '../../game/level-one-runtime'
 import { resolveLevelOnePerformance } from '../../game/level-one-performance'
@@ -16,13 +28,20 @@ import {
   type PlayerCheckIn,
 } from '../../lib/player-check-in'
 import { PlayerCheckInForm } from './player-check-in-form'
+import { useMenuAudio } from '../../hooks/use-menu-audio'
+import { ControlsPanel } from '../panels/controls-panel'
+import { SettingsPanel } from '../panels/settings-panel'
 
 export interface LevelOneScreenProps {
   assets?: LevelOneAssets
+  gameplaySoundsEnabled?: boolean
   level: GameLevelDefinition
   masterVolume?: number
+  musicEnabled?: boolean
   onComplete: (score: number) => void
   onExit: () => void
+  onGameplaySoundsEnabledChange?: (enabled: boolean) => void
+  onMusicEnabledChange?: (enabled: boolean) => void
   onNextLevel?: () => void
   performance?: LevelOnePerformanceSettings
   pointerYoke?: boolean
@@ -33,6 +52,7 @@ type CompletionCheckIn =
   | { status: 'pending' }
   | { status: 'skipped' }
   | { status: 'submitted'; username: string }
+type PausePanel = 'controls' | 'settings' | null
 
 const INITIAL_GAME_STATUS: LevelOneGameStatus = {
   phase: 'ready',
@@ -40,6 +60,67 @@ const INITIAL_GAME_STATUS: LevelOneGameStatus = {
 }
 
 const WEBGPU_FAILURE_SESSION_KEY = 'coastal-flight-webgpu-fallback'
+const INITIAL_HELD_CONTROLS = {
+  brakes: false,
+  pitchDown: false,
+  pitchUp: false,
+  rollLeft: false,
+  rollRight: false,
+  throttleDown: false,
+  throttleUp: false,
+  yawLeft: false,
+  yawRight: false,
+}
+
+type HeldControls = typeof INITIAL_HELD_CONTROLS
+
+const CONTROL_KEY_CODES = new Set([
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowUp',
+  'ControlLeft',
+  'ControlRight',
+  'KeyA',
+  'KeyB',
+  'KeyD',
+  'KeyE',
+  'KeyQ',
+  'KeyS',
+  'KeyW',
+  'ShiftLeft',
+  'ShiftRight',
+])
+
+function deriveHeldControls(heldCodes: ReadonlySet<string>): HeldControls {
+  return {
+    brakes: heldCodes.has('KeyB'),
+    pitchDown: heldCodes.has('KeyW') || heldCodes.has('ArrowUp'),
+    pitchUp: heldCodes.has('KeyS') || heldCodes.has('ArrowDown'),
+    rollLeft: heldCodes.has('KeyA') || heldCodes.has('ArrowLeft'),
+    rollRight: heldCodes.has('KeyD') || heldCodes.has('ArrowRight'),
+    throttleDown:
+      heldCodes.has('ControlLeft') || heldCodes.has('ControlRight'),
+    throttleUp: heldCodes.has('ShiftLeft') || heldCodes.has('ShiftRight'),
+    yawLeft: heldCodes.has('KeyQ'),
+    yawRight: heldCodes.has('KeyE'),
+  }
+}
+
+function controlsEqual(left: HeldControls, right: HeldControls): boolean {
+  return (Object.keys(INITIAL_HELD_CONTROLS) as (keyof HeldControls)[]).every(
+    (key) => left[key] === right[key],
+  )
+}
+
+function isInteractiveKeyboardTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    target.closest(
+      'input, textarea, select, button, a[href], [contenteditable="true"], [role="slider"]',
+    ) !== null
+  )
+}
 
 function hadWebGpuFailureThisSession(): boolean {
   try {
@@ -59,17 +140,27 @@ function rememberWebGpuFailure(): void {
 
 export function LevelOneScreen({
   assets,
+  gameplaySoundsEnabled = true,
   level,
   masterVolume = 0.7,
+  musicEnabled = true,
   onComplete,
   onExit,
+  onGameplaySoundsEnabledChange,
+  onMusicEnabledChange,
   onNextLevel,
   performance,
   pointerYoke = false,
 }: LevelOneScreenProps) {
+  const menuAudio = useMenuAudio()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const completionReportedRef = useRef(false)
   const gamePhaseRef = useRef<LevelOneGameStatus['phase']>('ready')
+  const gameplaySoundsEnabledRef = useRef(gameplaySoundsEnabled)
+  const heldCodesRef = useRef<Set<string>>(new Set())
+  const masterVolumeRef = useRef(masterVolume)
+  const performanceRef = useRef(resolveLevelOnePerformance(performance))
+  const pointerYokeRef = useRef(pointerYoke)
   const runtimeRef = useRef<LevelOneRuntime | null>(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [forceWebGl2, setForceWebGl2] = useState(
@@ -78,19 +169,12 @@ export function LevelOneScreen({
   const [gameStatus, setGameStatus] = useState(INITIAL_GAME_STATUS)
   const [completionCheckIn, setCompletionCheckIn] =
     useState<CompletionCheckIn>({ status: 'pending' })
+  const [heldControls, setHeldControls] =
+    useState<HeldControls>(INITIAL_HELD_CONTROLS)
+  const [pausePanel, setPausePanel] = useState<PausePanel>(null)
   const [paused, setPaused] = useState(false)
   const [retryKey, setRetryKey] = useState(0)
   const [status, setStatus] = useState<LoadingStatus>('loading')
-
-  const pitchDownHeld = useKeyHold('W')
-  const pitchUpHeld = useKeyHold('S')
-  const rollLeftHeld = useKeyHold('A')
-  const rollRightHeld = useKeyHold('D')
-  const yawLeftHeld = useKeyHold('Q')
-  const yawRightHeld = useKeyHold('E')
-  const throttleUpHeld = useKeyHold('Shift')
-  const throttleDownHeld = useKeyHold('Control')
-  const brakesHeld = useKeyHold('B')
 
   const resolvedAssets = useMemo<LevelOneAssets>(
     () => ({ ...DEFAULT_LEVEL_ONE_ASSETS, ...assets }),
@@ -102,6 +186,10 @@ export function LevelOneScreen({
   )
   const updateGameStatus = useCallback((nextStatus: LevelOneGameStatus) => {
     gamePhaseRef.current = nextStatus.phase
+    if (nextStatus.phase === 'complete') {
+      heldCodesRef.current.clear()
+      setHeldControls(INITIAL_HELD_CONTROLS)
+    }
     setGameStatus(nextStatus)
   }, [])
 
@@ -131,7 +219,7 @@ export function LevelOneScreen({
         callback: () => runtimeRef.current?.completeLevel(),
         hotkey: 'L',
         options: {
-          ignoreInputs: false,
+          ignoreInputs: true,
           preventDefault: true,
           requireReset: true,
         },
@@ -139,7 +227,7 @@ export function LevelOneScreen({
     ],
     {
       enabled: status === 'ready' && gameStatus.phase !== 'complete',
-      ignoreInputs: false,
+      ignoreInputs: true,
     },
   )
 
@@ -161,26 +249,117 @@ export function LevelOneScreen({
     }
 
     runtimeRef.current?.setControlInput({
-      brakes: brakesHeld,
-      pitch: Number(pitchUpHeld) - Number(pitchDownHeld),
-      roll: Number(rollRightHeld) - Number(rollLeftHeld),
-      throttleDown: throttleDownHeld,
-      throttleUp: throttleUpHeld,
-      yaw: Number(yawRightHeld) - Number(yawLeftHeld),
+      brakes: heldControls.brakes,
+      pitch: Number(heldControls.pitchUp) - Number(heldControls.pitchDown),
+      roll: Number(heldControls.rollRight) - Number(heldControls.rollLeft),
+      throttleDown: heldControls.throttleDown,
+      throttleUp: heldControls.throttleUp,
+      yaw: Number(heldControls.yawRight) - Number(heldControls.yawLeft),
     })
-  }, [
-    brakesHeld,
-    gameStatus.phase,
-    pitchDownHeld,
-    pitchUpHeld,
-    rollLeftHeld,
-    rollRightHeld,
-    throttleDownHeld,
-    throttleUpHeld,
-    status,
-    yawLeftHeld,
-    yawRightHeld,
-  ])
+  }, [gameStatus.phase, heldControls, status])
+
+  useEffect(() => {
+    runtimeRef.current?.setMasterVolume(masterVolume)
+  }, [masterVolume])
+
+  useEffect(() => {
+    runtimeRef.current?.setGameplayAudioEnabled(gameplaySoundsEnabled)
+  }, [gameplaySoundsEnabled])
+
+  useEffect(() => {
+    gameplaySoundsEnabledRef.current = gameplaySoundsEnabled
+    masterVolumeRef.current = masterVolume
+  }, [gameplaySoundsEnabled, masterVolume])
+
+  useEffect(() => {
+    if (status !== 'ready') {
+      performanceRef.current = resolvedPerformance
+      pointerYokeRef.current = pointerYoke
+    }
+  }, [pointerYoke, resolvedPerformance, status])
+
+  useEffect(() => {
+    const syncHeldControls = () => {
+      const nextControls = deriveHeldControls(heldCodesRef.current)
+      setHeldControls((currentControls) =>
+        controlsEqual(currentControls, nextControls)
+          ? currentControls
+          : nextControls,
+      )
+    }
+
+    const clearHeldControls = () => {
+      if (heldCodesRef.current.size === 0) {
+        return
+      }
+      heldCodesRef.current.clear()
+      syncHeldControls()
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        status !== 'ready' ||
+        paused ||
+        gamePhaseRef.current === 'complete' ||
+        event.defaultPrevented ||
+        isInteractiveKeyboardTarget(event.target)
+      ) {
+        return
+      }
+
+      if (event.code === 'Space') {
+        event.preventDefault()
+        if (!event.repeat) {
+          runtimeRef.current?.togglePaused()
+        }
+        return
+      }
+
+      if (event.code === 'KeyX') {
+        event.preventDefault()
+        if (!event.repeat) {
+          runtimeRef.current?.toggleControlsHelper()
+        }
+        return
+      }
+
+      if (!CONTROL_KEY_CODES.has(event.code)) {
+        return
+      }
+
+      event.preventDefault()
+      heldCodesRef.current.add(event.code)
+      syncHeldControls()
+    }
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (!CONTROL_KEY_CODES.has(event.code)) {
+        return
+      }
+
+      heldCodesRef.current.delete(event.code)
+      syncHeldControls()
+      if (
+        !paused &&
+        gamePhaseRef.current !== 'complete' &&
+        !event.defaultPrevented &&
+        !isInteractiveKeyboardTarget(event.target)
+      ) {
+        event.preventDefault()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    window.addEventListener('blur', clearHeldControls)
+    document.addEventListener('visibilitychange', clearHeldControls)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('blur', clearHeldControls)
+      document.removeEventListener('visibilitychange', clearHeldControls)
+    }
+  }, [paused, status])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -192,8 +371,12 @@ export function LevelOneScreen({
     setStatus('loading')
     setErrorMessage('')
     setPaused(false)
+    setPausePanel(null)
+    setCompletionCheckIn({ status: 'pending' })
     gamePhaseRef.current = 'ready'
     setGameStatus(INITIAL_GAME_STATUS)
+    heldCodesRef.current.clear()
+    setHeldControls(INITIAL_HELD_CONTROLS)
     canvas.dataset.level = level.id
     canvas.dataset.theme = level.theme
 
@@ -212,8 +395,9 @@ export function LevelOneScreen({
         const runtime = await LevelOneRuntime.create(canvas, {
           assets: resolvedAssets,
           forceWebGl2,
+          gameplayAudioEnabled: gameplaySoundsEnabledRef.current,
           level,
-          masterVolume,
+          masterVolume: masterVolumeRef.current,
           onBackendFailure: () => {
             if (!cancelled) {
               rememberWebGpuFailure()
@@ -222,7 +406,16 @@ export function LevelOneScreen({
             }
           },
           onGameStatus: updateGameStatus,
-          onPauseChange: setPaused,
+          onPauseChange: (nextPaused) => {
+            if (nextPaused) {
+              heldCodesRef.current.clear()
+              setHeldControls(INITIAL_HELD_CONTROLS)
+            }
+            setPaused(nextPaused)
+            if (!nextPaused) {
+              setPausePanel(null)
+            }
+          },
           onTelemetry: (telemetry) => {
             canvas.dataset.altitude = telemetry.altitude.toFixed(1)
             canvas.dataset.backend = telemetry.backend
@@ -237,8 +430,8 @@ export function LevelOneScreen({
             canvas.dataset.checkpointIndex = telemetry.checkpointIndex.toString()
             canvas.dataset.speed = telemetry.speed.toFixed(1)
           },
-          performance: resolvedPerformance,
-          pointerYoke,
+          performance: performanceRef.current,
+          pointerYoke: pointerYokeRef.current,
         })
 
         if (cancelled) {
@@ -272,10 +465,7 @@ export function LevelOneScreen({
   }, [
     forceWebGl2,
     level,
-    masterVolume,
-    pointerYoke,
     resolvedAssets,
-    resolvedPerformance,
     retryKey,
     updateGameStatus,
   ])
@@ -308,6 +498,7 @@ export function LevelOneScreen({
   }
 
   const resume = () => {
+    setPausePanel(null)
     runtimeRef.current?.setPaused(false)
     if (pointerYoke) {
       runtimeRef.current?.requestPointerLock()
@@ -316,11 +507,15 @@ export function LevelOneScreen({
 
   const restart = () => {
     setCompletionCheckIn({ status: 'pending' })
+    setPausePanel(null)
+    heldCodesRef.current.clear()
+    setHeldControls(INITIAL_HELD_CONTROLS)
     runtimeRef.current?.resetGame()
     runtimeRef.current?.setPaused(false)
   }
 
   const exitLevel = () => {
+    setPausePanel(null)
     runtimeRef.current?.setPaused(true)
     onExit()
   }
@@ -335,6 +530,31 @@ export function LevelOneScreen({
       status: 'submitted',
       username: checkIn.username,
     })
+  }
+
+  const openPausePanel = (panel: Exclude<PausePanel, null>) => {
+    menuAudio.play('click')
+    setPausePanel(panel)
+  }
+
+  const closePausePanel = () => {
+    menuAudio.play('back')
+    setPausePanel(null)
+  }
+
+  const toggleMusic = () => {
+    const enabled = !musicEnabled
+    onMusicEnabledChange?.(enabled)
+    gameAmbience.configure({ enabled, volume: masterVolume })
+    if (enabled) {
+      void gameAmbience.unlock()
+    }
+  }
+
+  const toggleGameplaySounds = () => {
+    const enabled = !gameplaySoundsEnabled
+    onGameplaySoundsEnabledChange?.(enabled)
+    runtimeRef.current?.setGameplayAudioEnabled(enabled)
   }
 
   return (
@@ -395,15 +615,52 @@ export function LevelOneScreen({
         </div>
       ) : null}
 
-      {status === 'ready' && !paused ? (
-        <button
-          aria-label={`Pause Level ${level.number}`}
-          className="absolute right-6 top-6 grid size-11 place-items-center rounded-md border border-flight-500/40 bg-flight-950/65 text-flight-100 backdrop-blur hover:border-hud/60 hover:text-hud"
-          onClick={() => runtimeRef.current?.setPaused(true)}
-          type="button"
-        >
-          <Pause aria-hidden="true" size={18} />
-        </button>
+      {status === 'ready' && !paused && gameStatus.phase !== 'complete' ? (
+        <div className="absolute right-6 top-6 flex flex-col gap-2">
+          <button
+            aria-label={`Pause Level ${level.number}`}
+            className="grid size-11 place-items-center rounded-md border border-flight-500/40 bg-flight-950/65 text-flight-100 backdrop-blur hover:border-hud/60 hover:text-hud"
+            onClick={() => runtimeRef.current?.setPaused(true)}
+            title="Pause"
+            type="button"
+          >
+            <Pause aria-hidden="true" size={18} />
+          </button>
+          <button
+            aria-label={musicEnabled ? 'Turn music off' : 'Turn music on'}
+            aria-pressed={musicEnabled}
+            className="grid size-11 place-items-center rounded-md border border-flight-500/40 bg-flight-950/65 text-flight-100 backdrop-blur hover:border-hud/60 hover:text-hud data-[active=false]:text-flight-500"
+            data-active={musicEnabled}
+            onClick={toggleMusic}
+            title={musicEnabled ? 'Music on' : 'Music off'}
+            type="button"
+          >
+            {musicEnabled ? (
+              <Music aria-hidden="true" size={18} />
+            ) : (
+              <VolumeX aria-hidden="true" size={18} />
+            )}
+          </button>
+          <button
+            aria-label={
+              gameplaySoundsEnabled
+                ? 'Turn gameplay sounds off'
+                : 'Turn gameplay sounds on'
+            }
+            aria-pressed={gameplaySoundsEnabled}
+            className="grid size-11 place-items-center rounded-md border border-flight-500/40 bg-flight-950/65 text-flight-100 backdrop-blur hover:border-hud/60 hover:text-hud data-[active=false]:text-flight-500"
+            data-active={gameplaySoundsEnabled}
+            onClick={toggleGameplaySounds}
+            title={gameplaySoundsEnabled ? 'Gameplay sounds on' : 'Gameplay sounds off'}
+            type="button"
+          >
+            {gameplaySoundsEnabled ? (
+              <Volume2 aria-hidden="true" size={18} />
+            ) : (
+              <VolumeX aria-hidden="true" size={18} />
+            )}
+          </button>
+        </div>
       ) : null}
 
       {status === 'ready' && gameStatus.phase === 'ready' && !paused ? (
@@ -413,7 +670,7 @@ export function LevelOneScreen({
               AIRCRAFT PARKED
             </p>
             <p className="mt-1 text-sm text-flight-300">
-              Shift throttle · WASD pitch/roll · Q/E yaw · C camera
+              Shift throttle · WASD/arrows pitch/roll · Space pause
             </p>
           </div>
           <button
@@ -457,6 +714,20 @@ export function LevelOneScreen({
                 <RotateCcw aria-hidden="true" size={18} /> Restart level
               </button>
               <button
+                className="flex items-center gap-3 rounded-md border border-flight-700 px-4 py-3 text-left font-semibold hover:border-flight-500"
+                onClick={() => openPausePanel('controls')}
+                type="button"
+              >
+                <Keyboard aria-hidden="true" size={18} /> Controls
+              </button>
+              <button
+                className="flex items-center gap-3 rounded-md border border-flight-700 px-4 py-3 text-left font-semibold hover:border-flight-500"
+                onClick={() => openPausePanel('settings')}
+                type="button"
+              >
+                <Settings aria-hidden="true" size={18} /> Settings
+              </button>
+              <button
                 className="flex items-center gap-3 rounded-md px-4 py-3 text-left font-semibold text-flight-300 hover:bg-flight-800 hover:text-flight-100"
                 onClick={exitLevel}
                 type="button"
@@ -465,6 +736,15 @@ export function LevelOneScreen({
               </button>
             </div>
           </section>
+          <ControlsPanel
+            onClose={closePausePanel}
+            open={pausePanel === 'controls'}
+          />
+          <SettingsPanel
+            audio={menuAudio}
+            onClose={closePausePanel}
+            open={pausePanel === 'settings'}
+          />
         </div>
       ) : null}
 

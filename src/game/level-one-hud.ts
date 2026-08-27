@@ -12,6 +12,7 @@ import type { LevelOneTelemetry } from './level-one-types'
 
 export interface LevelOneHud {
   dispose: () => void
+  setControlsHelperVisible: (visible: boolean) => void
   setVisible: (visible: boolean) => void
   update: (telemetry: LevelOneTelemetry) => void
 }
@@ -137,6 +138,34 @@ export function createLevelOneHud(
   secondaryData.height = '27px'
   flightPanel.addControl(secondaryData)
 
+  const controlsPanel = themedPanel('controls-helper-panel', '354px', '216px')
+  controlsPanel.left = '28px'
+  controlsPanel.top = '186px'
+  controlsPanel.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT
+  controlsPanel.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP
+  texture.addControl(controlsPanel)
+
+  const controlsLabel = themedText(
+    'controls-helper-label',
+    'CONTROLS  //  X HIDE',
+    11,
+    theme.dim,
+  )
+  controlsLabel.left = '17px'
+  controlsLabel.left = '20px'
+  controlsLabel.top = '-88px'
+  controlsLabel.width = '314px'
+  controlsLabel.height = '22px'
+  controlsPanel.addControl(controlsLabel)
+
+  const controlsText = themedText('controls-helper-text', '', 13)
+  controlsText.left = '20px'
+  controlsText.top = '22px'
+  controlsText.width = '314px'
+  controlsText.height = '160px'
+  controlsText.lineSpacing = '4px'
+  controlsPanel.addControl(controlsText)
+
   const objectivePanel = themedPanel('objective-panel', '440px', '80px')
   objectivePanel.top = '28px'
   objectivePanel.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER
@@ -247,6 +276,8 @@ export function createLevelOneHud(
   const update = (telemetry: LevelOneTelemetry) => {
     primaryData.text = `SPD  ${telemetry.speed.toFixed(0).padStart(3, '0')} km/h     ALT  ${telemetry.altitude.toFixed(0).padStart(3, '0')} m\nHDG  ${telemetry.heading.toFixed(0).padStart(3, '0')}°          VSI  ${telemetry.verticalSpeed >= 0 ? '+' : ''}${telemetry.verticalSpeed.toFixed(1)} m/s`
     secondaryData.text = `${telemetry.backend.toUpperCase()}  ·  ${telemetry.fps.toFixed(0)} FPS  ·  ${Math.round(telemetry.renderScale * 100)}%`
+    controlsText.text =
+      'W / S       [↑] [↓]   PITCH\nA / D       [←] [→]   ROLL\nQ / E                 RUDDER\nSHIFT / CTRL          THROTTLE\nSPACE                 PAUSE\nX                     HIDE'
     objectiveText.text = `${telemetry.objective}  ${telemetry.checkpointDistance > 1 ? `// ${telemetry.checkpointDistance.toFixed(0)} m` : ''}`
     statusText.text = `ENGINE   ${telemetry.engineRunning ? 'ON' : 'OFF'}\nTHROTTLE  ${Math.round(telemetry.throttle * 100).toString().padStart(3, '0')}%\nGEAR      DOWN\nDAMAGE    ${Math.round(telemetry.damage).toString().padStart(3, '0')}%`
     progress.text = `SCORE  ${telemetry.score.toString().padStart(4, '0')}     AIR  ${formatFlightTime(telemetry.airborneSeconds)}     COINS  ${telemetry.coinsCollected}/${telemetry.coinCount}     RINGS  ${telemetry.checkpointIndex}/${telemetry.checkpointCount}`
@@ -276,6 +307,9 @@ export function createLevelOneHud(
 
   return {
     dispose: () => texture.dispose(),
+    setControlsHelperVisible: (visible) => {
+      controlsPanel.isVisible = visible
+    },
     setVisible: (visible) => {
       texture.rootContainer.isVisible = visible
     },

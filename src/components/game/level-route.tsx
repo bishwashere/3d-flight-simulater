@@ -28,7 +28,11 @@ export function LevelRoute() {
   const adaptiveResolutionEnabled = useSettingsStore(
     (state) => state.adaptiveResolutionEnabled,
   )
+  const gameplaySoundsEnabled = useSettingsStore(
+    (state) => state.gameplaySoundsEnabled,
+  )
   const masterVolume = useSettingsStore((state) => state.masterVolume)
+  const musicEnabled = useSettingsStore((state) => state.musicEnabled)
   const pointerYokeEnabled = useSettingsStore(
     (state) => state.pointerYokeEnabled,
   )
@@ -39,6 +43,10 @@ export function LevelRoute() {
   const vegetationDensity = useSettingsStore(
     (state) => state.vegetationDensity,
   )
+  const setGameplaySoundsEnabled = useSettingsStore(
+    (state) => state.setGameplaySoundsEnabled,
+  )
+  const setMusicEnabled = useSettingsStore((state) => state.setMusicEnabled)
   const performanceSettings = useMemo(
     () => ({
       adaptiveResolution: adaptiveResolutionEnabled,
@@ -77,10 +85,14 @@ export function LevelRoute() {
   return (
     <LevelOneScreen
       key={level.id}
+      gameplaySoundsEnabled={gameplaySoundsEnabled}
       level={level}
       masterVolume={masterVolume}
+      musicEnabled={musicEnabled}
       onComplete={handleComplete}
       onExit={() => void navigate(PANEL_PATHS.levels)}
+      onGameplaySoundsEnabledChange={setGameplaySoundsEnabled}
+      onMusicEnabledChange={setMusicEnabled}
       onNextLevel={
         nextLevel
           ? () => void navigate(getLevelPath(nextLevel.id))

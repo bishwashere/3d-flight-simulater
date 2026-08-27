@@ -14,9 +14,17 @@ const runtimeMock = vi.hoisted(() => {
     completeLevel: vi.fn(() => {
       onGameStatus?.({ phase: 'complete', score: 600 })
     }),
+    cycleCamera: vi.fn(),
     dispose: vi.fn(),
+    releasePointerLockOrPause: vi.fn(),
+    resetGame: vi.fn(),
     setControlInput: vi.fn(),
+    setGameplayAudioEnabled: vi.fn(),
+    setMasterVolume: vi.fn(),
     setPaused: vi.fn(),
+    startEngine: vi.fn(),
+    toggleControlsHelper: vi.fn(),
+    togglePaused: vi.fn(),
   }
 
   return {
@@ -79,13 +87,24 @@ describe('LevelOneScreen completion flow', () => {
     expect(
       screen.getByRole('form', { name: 'Optional pilot check-in' }),
     ).toBeInTheDocument()
+    const username = screen.getByLabelText('Username')
+    username.focus()
+    expect(
+      fireEvent.keyDown(username, { code: 'KeyA', key: 'a' }),
+    ).toBe(true)
+    expect(
+      fireEvent.keyDown(username, { code: 'Space', key: ' ' }),
+    ).toBe(true)
+    expect(runtimeMock.runtime.completeLevel).toHaveBeenCalledTimes(1)
+    expect(runtimeMock.runtime.resetGame).not.toHaveBeenCalled()
+    expect(runtimeMock.runtime.togglePaused).not.toHaveBeenCalled()
     fireEvent.blur(window)
     expect(runtimeMock.runtime.setPaused).not.toHaveBeenCalled()
     expect(
       screen.getByRole('form', { name: 'Optional pilot check-in' }),
     ).toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('Username'), {
+    fireEvent.change(username, {
       target: { value: '  Test Pilot  ' },
     })
     fireEvent.change(screen.getByLabelText('Email'), {

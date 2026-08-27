@@ -168,6 +168,19 @@ export function createCrashEffects(
     },
   )
 
+  const coreFire: Mesh[] = Array.from({ length: 4 }, (_, index) => {
+    const mesh = MeshBuilder.CreateSphere(
+      `crash-core-fire-${index + 1}`,
+      { diameter: 1, segments: 8 },
+      scene,
+    )
+    mesh.parent = root
+    mesh.material = index === 0 ? hotFireMaterial : fireMaterial
+    mesh.isPickable = false
+    setParticleVisibility(mesh, false)
+    return mesh
+  })
+
   let active = false
   let crashOriginY = 0
   let totalElapsed = 0
@@ -180,6 +193,9 @@ export function createCrashEffects(
     }
     for (const fragment of debris) {
       setParticleVisibility(fragment.mesh, false)
+    }
+    for (const flame of coreFire) {
+      setParticleVisibility(flame, false)
     }
   }
 
@@ -198,13 +214,21 @@ export function createCrashEffects(
       root.position.copyFrom(position)
       crashOriginY = position.y
 
+      for (const [index, flame] of coreFire.entries()) {
+        const offset = seededDirection(index + 30, 0.1).scale(index === 0 ? 0 : 0.72)
+        flame.position.copyFrom(offset)
+        flame.scaling.copyFromFloats(0.2, 0.2, 0.2)
+        flame.visibility = 1
+        setParticleVisibility(flame, true)
+      }
+
       for (const [index, particle] of fire.entries()) {
         particle.age = -index * 0.035
         particle.mesh.position.copyFrom(
           seededDirection(index, 0.15).scale(0.48),
         )
-        particle.velocity.copyFrom(seededDirection(index + 2, 1.2))
-        particle.velocity.addInPlace(inheritedVelocity.scale(0.018))
+        particle.velocity.copyFrom(seededDirection(index + 2, 1.2).scale(1.35))
+        particle.velocity.addInPlace(inheritedVelocity.scale(0.04))
         particle.mesh.scaling.copyFromFloats(0.1, 0.1, 0.1)
         setParticleVisibility(particle.mesh, false)
       }
@@ -226,9 +250,9 @@ export function createCrashEffects(
         fragment.mesh.position.copyFrom(
           seededDirection(index + 3, 0.18).scale(0.45),
         )
-        fragment.velocity.copyFrom(seededDirection(index + 18, 2.4))
-        fragment.velocity.scaleInPlace(2.2 + (index % 4) * 0.46)
-        fragment.velocity.addInPlace(inheritedVelocity.scale(0.06))
+        fragment.velocity.copyFrom(seededDirection(index + 18, 2.7))
+        fragment.velocity.scaleInPlace(3 + (index % 4) * 0.72)
+        fragment.velocity.addInPlace(inheritedVelocity.scale(0.14))
         setParticleVisibility(fragment.mesh, true)
       }
     },
@@ -239,6 +263,15 @@ export function createCrashEffects(
 
       const delta = Math.min(Math.max(deltaSeconds, 0), 0.05)
       totalElapsed += delta
+
+      for (const [index, flame] of coreFire.entries()) {
+        const flicker = 0.86 + Math.sin(totalElapsed * (11 + index * 2.7)) * 0.18
+        const width = (index === 0 ? 2.7 : 1.65) * flicker
+        const height = (index === 0 ? 4.4 : 3.15) * (1.02 + flicker * 0.22)
+        flame.scaling.copyFromFloats(width, height, width)
+        flame.position.y = 0.7 + Math.sin(totalElapsed * 8 + index) * 0.18
+        flame.visibility = 0.88 + Math.sin(totalElapsed * 17 + index) * 0.08
+      }
 
       for (const particle of fire) {
         particle.age += delta

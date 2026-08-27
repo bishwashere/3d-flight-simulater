@@ -392,8 +392,23 @@ export class AircraftSimulation {
     this.state.damage = 100
     this.state.engineRunning = false
     this.state.throttle = 0
+    const blastDirection = new Vector3(
+      normal.x,
+      Math.max(0.42, normal.y * 0.28),
+      normal.z,
+    )
+    if (blastDirection.lengthSquared() > 0.001) {
+      blastDirection.normalize()
+      this.state.velocity.addInPlace(
+        blastDirection.scale(clamp(this.state.airspeed * 0.22, 5.5, 18)),
+      )
+    }
     this.state.angularVelocity.addInPlace(
-      new Vector3(normal.z * 0.8 + 0.35, normal.x * 0.5, -normal.x * 0.7 - 0.25),
+      new Vector3(
+        normal.z * 1.25 + 0.75,
+        normal.x * 0.85 + 0.35,
+        -normal.x * 1.15 - 0.58,
+      ),
     )
   }
 
@@ -613,11 +628,11 @@ export class AircraftSimulation {
     const authority = clamp((airspeed / 32) ** 2, 0.08, 1.45)
     const stalledAuthority = this.stalledLatch ? 0.52 : 1
     const pitchAcceleration = -pitchInput * 1.55 * authority * stalledAuthority
-    const rollAcceleration = -rollInput * 2.3 * authority * stalledAuthority
-    const yawAcceleration = yawInput * 0.9 * authority * stalledAuthority
+    const rollAcceleration = -rollInput * 2.85 * authority * stalledAuthority
+    const yawAcceleration = yawInput * 1.05 * authority * stalledAuthority
     const pitchStability = angleOfAttack * 1.65 * authority
     const yawStability = sideslip * 1.15 * authority
-    const coordinatedYaw = aircraftUp.x * clamp(airspeed / 38, 0, 1) * 0.42
+    const coordinatedYaw = aircraftUp.x * clamp(airspeed / 34, 0, 1) * 0.78
     const stallPitchDown = this.stalledLatch
       ? 0.55 + Math.max(0, Math.abs(angleOfAttack) - 0.18) * 1.4
       : 0
@@ -630,7 +645,7 @@ export class AircraftSimulation {
 
     const pitchDamping = Math.exp(-2.15 * authority * deltaSeconds)
     const yawDamping = Math.exp(-1.75 * authority * deltaSeconds)
-    const rollDamping = Math.exp(-2.35 * authority * deltaSeconds)
+    const rollDamping = Math.exp(-2.15 * authority * deltaSeconds)
     this.state.angularVelocity.x *= pitchDamping
     this.state.angularVelocity.y *= yawDamping
     this.state.angularVelocity.z *= rollDamping

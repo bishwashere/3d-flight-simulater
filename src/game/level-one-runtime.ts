@@ -39,6 +39,7 @@ import {
 export interface LevelOneRuntimeOptions {
   assets: LevelOneAssets
   forceWebGl2?: boolean
+  gameplayAudioEnabled?: boolean
   level: GameLevelDefinition
   masterVolume?: number
   onBackendFailure?: () => void
@@ -50,6 +51,12 @@ export interface LevelOneRuntimeOptions {
 }
 
 const DEG_PER_RADIAN = 180 / Math.PI
+const IDLE_DESCENT_PITCH_INPUT = -0.18
+const UNBOOSTED_CLIMB_MAX_METERS = 36
+const UNBOOSTED_CLIMB_MIN_METERS = 5
+const UNBOOSTED_CLIMB_SPEED_MAX = 72
+const UNBOOSTED_CLIMB_SPEED_MIN = 32
+const CRASH_VISUAL_RADIUS = 22
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value))
@@ -69,6 +76,7 @@ export class LevelOneRuntime {
   private controlInput: LevelOneControlInput = {
     ...EMPTY_LEVEL_ONE_CONTROL_INPUT,
   }
+  private controlsHelperVisible = true
   private readonly course: LevelOneCourse
   private currentPixelRatio: number
   private readonly engine: LevelOneEngine
@@ -89,6 +97,10 @@ export class LevelOneRuntime {
   private readonly resizeObserver: ResizeObserver
   private readonly settings: ResolvedLevelOnePerformance
   private readonly simulation: AircraftSimulation
+  private crashCameraPosition: Vector3 | null = null
+  private crashCameraTarget: Vector3 | null = null
+  private crashFocus: Vector3 | null = null
+  private unboostedClimbBaseAltitude: number | null = null
   private readonly world: LevelOneWorld
   private webGpuDevice?: GPUDevice
   private webGpuErrorHandler?: (event: GPUUncapturedErrorEvent) => void
@@ -104,6 +116,7 @@ export class LevelOneRuntime {
     pixelRatio: number,
   ) {
     this.audio = createLevelOneAudio({ masterVolume: options.masterVolume })
+    this.audio.setMuted(options.gameplayAudioEnabled === false)
     this.backend = backend
     this.basePixelRatio = pixelRatio
     this.camera = camera
@@ -302,14 +315,75 @@ export class LevelOneRuntime {
     const throttleDelta =
       Number(this.controlInput.throttleUp) -
       Number(this.controlInput.throttleDown)
+    const pitch = clamp(this.controlInput.pitch + this.pointerPitch, -1, 1)
+    const roll = clamp(this.controlInput.roll + this.pointerRoll, -1, 1)
+    const hasFlightControlInput =
+      Math.abs(pitch) > 0.001 ||
+      Math.abs(roll) > 0.001 ||
+      Math.abs(this.controlInput.yaw) > 0.001
+    const resolvedPitch = this.resolvePitchInput(pitch, hasFlightControlInput)
 
     return {
       brakes: this.controlInput.brakes,
-      pitch: clamp(this.controlInput.pitch + this.pointerPitch, -1, 1),
-      roll: clamp(this.controlInput.roll + this.pointerRoll, -1, 1),
+      pitch: resolvedPitch,
+      roll,
       throttleDelta,
       yaw: this.controlInput.yaw,
     }
+  }
+
+  private resolvePitchInput(
+    requestedPitch: number,
+    hasFlightControlInput: boolean,
+  ): number {
+    const state = this.simulation.state
+    if (state.onGround) {
+      this.unboostedClimbBaseAltitude = null
+      return requestedPitch
+    }
+
+    if (this.controlInput.throttleUp) {
+      this.unboostedClimbBaseAltitude = null
+      return hasFlightControlInput ? requestedPitch : IDLE_DESCENT_PITCH_INPUT
+    }
+
+    const altitude = this.getAircraftAltitude(state)
+    if (
+      this.unboostedClimbBaseAltitude === null ||
+      state.verticalSpeed <= 0.1 ||
+      altitude < this.unboostedClimbBaseAltitude
+    ) {
+      this.unboostedClimbBaseAltitude = altitude
+    }
+
+    const speedFactor = clamp(
+      (state.airspeed - UNBOOSTED_CLIMB_SPEED_MIN) /
+        (UNBOOSTED_CLIMB_SPEED_MAX - UNBOOSTED_CLIMB_SPEED_MIN),
+      0,
+      1,
+    )
+    const climbAllowance =
+      UNBOOSTED_CLIMB_MIN_METERS +
+      (UNBOOSTED_CLIMB_MAX_METERS - UNBOOSTED_CLIMB_MIN_METERS) * speedFactor
+    const climbedMeters = Math.max(0, altitude - this.unboostedClimbBaseAltitude)
+    const spentClimb = clamp(
+      (climbedMeters - climbAllowance * 0.55) /
+        Math.max(1, climbAllowance * 0.45),
+      0,
+      1,
+    )
+    const maxUnboostedPitch = 0.42 * speedFactor * (1 - spentClimb)
+    let pitch = Math.min(requestedPitch, maxUnboostedPitch)
+
+    if (!hasFlightControlInput) {
+      pitch = Math.min(pitch, IDLE_DESCENT_PITCH_INPUT)
+    }
+
+    if (spentClimb > 0 && state.verticalSpeed > 0.3) {
+      pitch = Math.min(pitch, -0.12 - spentClimb * 0.18)
+    }
+
+    return clamp(pitch, -1, 1)
   }
 
   private checkWorldCollisions(): void {
@@ -464,9 +538,17 @@ export class LevelOneRuntime {
     this.cameraMode = 'chase'
     this.setAircraftVisibility(true)
     this.world.aircraft.setCrashState(true)
-    this.world.showCrashEffects(state.position, state.velocity)
+    this.captureCrashFraming(state)
+    this.world.showCrashEffects(state.position, state.velocity.scale(1.45))
     this.audio.playCrash()
     this.emitGameStatus(true)
+  }
+
+  private captureCrashFraming(state: AircraftSimulationState): void {
+    const focus = state.position.clone()
+    this.crashFocus = focus
+    this.crashCameraPosition = this.camera.position.clone()
+    this.crashCameraTarget = focus.add(new Vector3(0, 2.4, 0))
   }
 
   private isInsideLandingZone(position: Vector3): boolean {
@@ -483,11 +565,22 @@ export class LevelOneRuntime {
     )
   }
 
+  private getAircraftAltitude(state: Readonly<AircraftSimulationState>): number {
+    const terrainHeight = this.world.terrainHeightAt(
+      state.position.x,
+      state.position.z,
+    )
+    return Math.max(
+      0,
+      state.position.y - terrainHeight - GEOMETRIC_AIRCRAFT_GROUND_CLEARANCE,
+    )
+  }
+
   private syncAircraftVisual(
     state: AircraftSimulationState,
     deltaSeconds: number,
   ): void {
-    this.world.aircraft.root.position.copyFrom(state.position)
+    this.world.aircraft.root.position.copyFrom(this.resolveAircraftVisualPosition(state))
     if (!this.world.aircraft.root.rotationQuaternion) {
       this.world.aircraft.root.rotationQuaternion = Quaternion.Identity()
     }
@@ -506,6 +599,26 @@ export class LevelOneRuntime {
     )
   }
 
+  private resolveAircraftVisualPosition(
+    state: Readonly<AircraftSimulationState>,
+  ): Vector3 {
+    if (!state.crashed || !this.crashFocus) {
+      return state.position
+    }
+
+    const offset = state.position.subtract(this.crashFocus)
+    const horizontalOffset = new Vector3(offset.x, 0, offset.z)
+    if (horizontalOffset.length() > CRASH_VISUAL_RADIUS) {
+      horizontalOffset.normalize().scaleInPlace(CRASH_VISUAL_RADIUS)
+    }
+
+    return new Vector3(
+      this.crashFocus.x + horizontalOffset.x,
+      this.crashFocus.y + clamp(offset.y, -4, 18),
+      this.crashFocus.z + horizontalOffset.z,
+    )
+  }
+
   private updateCamera(
     state: AircraftSimulationState,
     deltaSeconds: number,
@@ -518,7 +631,10 @@ export class LevelOneRuntime {
 
     let desiredPosition: Vector3
     let target: Vector3
-    if (this.cameraMode === 'cockpit') {
+    if (state.crashed && this.crashCameraPosition && this.crashCameraTarget) {
+      desiredPosition = this.crashCameraPosition
+      target = this.crashCameraTarget
+    } else if (this.cameraMode === 'cockpit') {
       desiredPosition = state.position
         .add(forward.scale(2.1))
         .add(up.scale(1.05))
@@ -531,7 +647,7 @@ export class LevelOneRuntime {
       target = state.position.add(forward.scale(13)).add(up.scale(1.2))
     }
 
-    if (state.crashed) {
+    if (state.crashed && !this.crashCameraPosition) {
       const shakeStrength = Math.max(0, 1.2 - state.elapsedSeconds * 0.01)
       desiredPosition.addInPlace(
         new Vector3(
@@ -582,16 +698,9 @@ export class LevelOneRuntime {
     const displayedSpeed = state.onGround
       ? Math.hypot(state.velocity.x, state.velocity.z)
       : state.airspeed
-    const terrainHeight = this.world.terrainHeightAt(
-      state.position.x,
-      state.position.z,
-    )
     const telemetry: LevelOneTelemetry = {
       airborneSeconds: course.airborneSeconds,
-      altitude: Math.max(
-        0,
-        state.position.y - terrainHeight - GEOMETRIC_AIRCRAFT_GROUND_CLEARANCE,
-      ),
+      altitude: this.getAircraftAltitude(state),
       angleOfAttack: state.angleOfAttack,
       airtimeScore: course.airtimeScore,
       backend: this.backend,
@@ -678,8 +787,34 @@ export class LevelOneRuntime {
     }
   }
 
+  private setAircraftCockpitViewVisibility(): void {
+    const visibleCockpitMeshes = new Set([
+      'aircraft-engine-stripe',
+      'aircraft-nose',
+      'aircraft-propeller-blade',
+      'aircraft-propeller-hub',
+      'aircraft-propeller-tip-1',
+      'aircraft-propeller-tip-2',
+    ])
+
+    for (const mesh of this.world.aircraft.root.getChildMeshes(false)) {
+      mesh.visibility = visibleCockpitMeshes.has(mesh.name) ? 1 : 0
+    }
+  }
+
   setControlInput(input: LevelOneControlInput): void {
     this.controlInput = { ...input }
+  }
+
+  setGameplayAudioEnabled(enabled: boolean): void {
+    this.audio.setMuted(!enabled)
+    if (enabled && !this.paused) {
+      void this.audio.resume()
+    }
+  }
+
+  setMasterVolume(volume: number): void {
+    this.audio.setMasterVolume(volume)
   }
 
   startEngine(): void {
@@ -701,7 +836,11 @@ export class LevelOneRuntime {
       return
     }
     this.cameraMode = this.cameraMode === 'chase' ? 'cockpit' : 'chase'
-    this.setAircraftVisibility(this.cameraMode === 'chase')
+    if (this.cameraMode === 'cockpit') {
+      this.setAircraftCockpitViewVisibility()
+    } else {
+      this.setAircraftVisibility(true)
+    }
     this.updateCamera(this.simulation.state, 1 / 60, true)
   }
 
@@ -719,8 +858,13 @@ export class LevelOneRuntime {
       this.controlInput = { ...EMPTY_LEVEL_ONE_CONTROL_INPUT }
       this.pointerPitch = 0
       this.pointerRoll = 0
+      this.crashCameraPosition = null
+      this.crashCameraTarget = null
+      this.crashFocus = null
+      this.unboostedClimbBaseAltitude = null
       this.cameraMode = 'chase'
       this.world.clearCrashEffects()
+      this.world.aircraft.setCrashState(false)
       this.setAircraftVisibility(true)
       this.audio.reset()
       this.syncAircraftVisual(this.simulation.state, 0)
@@ -737,6 +881,10 @@ export class LevelOneRuntime {
     this.controlInput = { ...EMPTY_LEVEL_ONE_CONTROL_INPUT }
     this.pointerPitch = 0
     this.pointerRoll = 0
+    this.crashCameraPosition = null
+    this.crashCameraTarget = null
+    this.crashFocus = null
+    this.unboostedClimbBaseAltitude = null
     this.cameraMode = 'chase'
     this.world.clearCrashEffects()
     this.world.resetCoins()
@@ -767,6 +915,11 @@ export class LevelOneRuntime {
 
   togglePaused(): void {
     this.setPaused(!this.paused)
+  }
+
+  toggleControlsHelper(): void {
+    this.controlsHelperVisible = !this.controlsHelperVisible
+    this.hud.setControlsHelperVisible(this.controlsHelperVisible)
   }
 
   setPaused(paused: boolean): void {

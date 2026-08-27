@@ -16,6 +16,17 @@ interface AircraftPartOptions {
   receiveShadows?: boolean
 }
 
+interface CrashFragment {
+  homePosition: Vector3
+  homeRotation: Vector3
+  homeScaling: Vector3
+  mesh: Mesh
+  targetPosition: Vector3
+  targetRotation: Vector3
+}
+
+let activeAircraftPartCollector: ((mesh: Mesh) => void) | undefined
+
 function attachAircraftPart(
   mesh: Mesh,
   options: AircraftPartOptions,
@@ -30,6 +41,7 @@ function attachAircraftPart(
     shadowGenerator?.addShadowCaster(mesh)
   }
 
+  activeAircraftPartCollector?.(mesh)
   return mesh
 }
 
@@ -80,12 +92,43 @@ function damp(current: number, target: number, speed: number, delta: number): nu
   return current + (target - current) * (1 - Math.exp(-speed * delta))
 }
 
+function dampVector(
+  current: Vector3,
+  target: Readonly<Vector3>,
+  speed: number,
+  delta: number,
+): void {
+  current.x = damp(current.x, target.x, speed, delta)
+  current.y = damp(current.y, target.y, speed, delta)
+  current.z = damp(current.z, target.z, speed, delta)
+}
+
+function seededCrashOffset(index: number): Vector3 {
+  const angle = index * 2.399963229728653
+  const distance = 2.3 + (index % 5) * 1.18
+  return new Vector3(
+    Math.cos(angle) * distance,
+    0.65 + ((index * 7) % 8) * 0.36,
+    Math.sin(angle) * distance,
+  )
+}
+
+function seededCrashRotation(index: number): Vector3 {
+  return new Vector3(
+    ((index % 5) - 2) * 0.42,
+    0.7 + (index % 7) * 0.38,
+    ((index % 6) - 2.5) * 0.48,
+  )
+}
+
 export function createGeometricAircraft(
   scene: Scene,
   materials: GeometricWorldMaterials,
   shadowGenerator?: ShadowGenerator,
 ): GeometricAircraftVisual {
   const root = new TransformNode('aircraft-root', scene)
+  const aircraftParts: Mesh[] = []
+  activeAircraftPartCollector = (mesh) => aircraftParts.push(mesh)
 
   const fuselage = attachAircraftPart(
     MeshBuilder.CreateCylinder(
@@ -335,6 +378,7 @@ export function createGeometricAircraft(
   noseAnchor.parent = root
   noseAnchor.position.copyFromFloats(0, 0.25, 6.2)
 
+  activeAircraftPartCollector = undefined
   const crashScar = attachAircraftPart(
     MeshBuilder.CreateSphere(
       'aircraft-crash-scorch',
@@ -353,6 +397,22 @@ export function createGeometricAircraft(
   crashScar.scaling.copyFromFloats(0.55, 0.3, 0.8)
   crashScar.visibility = 0
 
+  const crashFragments: CrashFragment[] = aircraftParts.map((mesh, index) => {
+    const homePosition = mesh.position.clone()
+    const homeRotation = mesh.rotation.clone()
+    const homeScaling = mesh.scaling.clone()
+    return {
+      homePosition,
+      homeRotation,
+      homeScaling,
+      mesh,
+      targetPosition: homePosition.add(seededCrashOffset(index)),
+      targetRotation: homeRotation.add(seededCrashRotation(index)),
+    }
+  })
+
+  let crashedVisual = false
+  let crashElapsed = 0
   let displayedGearRetraction = 0
   let propellerSpeed = 0
 
@@ -362,11 +422,50 @@ export function createGeometricAircraft(
     noseAnchor,
     root,
     setCrashState(crashed): void {
+      crashedVisual = crashed
+      crashElapsed = 0
       crashScar.visibility = crashed ? 0.92 : 0
       propellerSpeed = crashed ? 0 : propellerSpeed
+      if (!crashed) {
+        for (const fragment of crashFragments) {
+          fragment.mesh.position.copyFrom(fragment.homePosition)
+          fragment.mesh.rotation.copyFrom(fragment.homeRotation)
+          fragment.mesh.scaling.copyFrom(fragment.homeScaling)
+        }
+      }
     },
     updateAnimations(state, deltaSeconds): void {
       const safeDelta = Math.min(Math.max(deltaSeconds, 0), 0.1)
+      if (crashedVisual) {
+        crashElapsed += safeDelta
+        const spreadSpeed = crashElapsed < 0.55 ? 15 : 5.5
+        for (const [index, fragment] of crashFragments.entries()) {
+          dampVector(fragment.mesh.position, fragment.targetPosition, spreadSpeed, safeDelta)
+          dampVector(fragment.mesh.rotation, fragment.targetRotation, 8.5, safeDelta)
+          const scorchScale = index % 4 === 0 ? 0.72 : 0.86
+          fragment.mesh.scaling.x = damp(
+            fragment.mesh.scaling.x,
+            fragment.homeScaling.x * scorchScale,
+            5,
+            safeDelta,
+          )
+          fragment.mesh.scaling.y = damp(
+            fragment.mesh.scaling.y,
+            fragment.homeScaling.y * scorchScale,
+            5,
+            safeDelta,
+          )
+          fragment.mesh.scaling.z = damp(
+            fragment.mesh.scaling.z,
+            fragment.homeScaling.z * scorchScale,
+            5,
+            safeDelta,
+          )
+        }
+        propellerSpeed = 0
+        return
+      }
+
       const targetPropellerSpeed = state.engineRunning
         ? 8 + Math.max(0, Math.min(1, state.throttle)) * 42
         : 0
