@@ -1,9 +1,29 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { useProgressionStore } from '../../state'
+import { createPilotRecord } from '../../lib/pilot-profile'
+import { usePilotProfileStore, useProgressionStore } from '../../state'
 import { LevelRoute } from './level-route'
+
+const navigation = vi.hoisted(() => ({
+  levelId: 'level-1',
+  push: vi.fn(),
+  replace: vi.fn(),
+}))
+
+const savePilotRecord = vi.hoisted(() =>
+  vi.fn(async <T,>(record: T): Promise<T> => record),
+)
+
+vi.mock('next/navigation', () => ({
+  useParams: () => ({ levelId: navigation.levelId }),
+  useRouter: () => ({
+    push: navigation.push,
+    replace: navigation.replace,
+  }),
+}))
+
+vi.mock('../../lib/pilot-api', () => ({ savePilotRecord }))
 
 vi.mock('./level-one-screen', () => ({
   LevelOneScreen: ({
@@ -32,33 +52,53 @@ vi.mock('./level-one-screen', () => ({
 }))
 
 function renderLevel(path: string) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/game/:levelId" element={<LevelRoute />} />
-        <Route path="/play" element={<p>Level select</p>} />
-      </Routes>
-    </MemoryRouter>,
-  )
+  navigation.levelId = path.split('/').at(-1) ?? ''
+  return render(<LevelRoute />)
 }
 
 describe('level route', () => {
   beforeEach(() => {
     localStorage.clear()
+    navigation.levelId = 'level-1'
+    navigation.push.mockReset()
+    navigation.replace.mockReset()
+    savePilotRecord.mockClear()
     useProgressionStore.getState().resetProgression()
+    usePilotProfileStore.setState({
+      hasHydrated: true,
+      hasLoadedRemote: true,
+      record: createPilotRecord({
+        email: 'pilot@example.com',
+        username: 'Test Pilot',
+      }),
+    })
   })
 
   it.each(['/game/level-2', '/game/not-a-level'])(
     'redirects guarded URL %s to level select',
-    (path) => {
+    async (path) => {
       renderLevel(path)
 
-      expect(screen.getByText('Level select')).toBeInTheDocument()
+      await waitFor(() => {
+        expect(navigation.replace).toHaveBeenCalledWith('/play')
+      })
     },
   )
 
-  it('records completion and continues to the unlocked next level', () => {
+  it('asks for a pilot profile before starting when local identity is absent', () => {
+    usePilotProfileStore.setState({ record: null })
     renderLevel('/game/level-1')
+
+    expect(
+      screen.getByRole('heading', { name: 'Identify pilot' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('form', { name: 'Pilot profile' }),
+    ).toBeInTheDocument()
+  })
+
+  it('records completion, syncs the score, and continues to the next level', async () => {
+    const view = renderLevel('/game/level-1')
 
     expect(screen.getByText(/Playing Level 1: First Flight/i)).toBeInTheDocument()
 
@@ -69,7 +109,20 @@ describe('level route', () => {
       unlockedLevelIds: ['level-1', 'level-2'],
     })
 
+    await waitFor(() => {
+      expect(savePilotRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: 'pilot@example.com',
+          levels: [{ id: 1, passed: true, score: 900 }],
+        }),
+      )
+    })
+
     fireEvent.click(screen.getByRole('button', { name: 'Next level' }))
+    expect(navigation.push).toHaveBeenCalledWith('/game/level-2')
+
+    navigation.levelId = 'level-2'
+    view.rerender(<LevelRoute />)
     expect(screen.getByText(/Playing Level 2: Island Bend/i)).toBeInTheDocument()
   })
 })

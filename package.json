@@ -8,16 +8,18 @@
     "npm": ">=10.0.0"
   },
   "scripts": {
-    "dev": "vite",
-    "typecheck": "tsc -b --pretty",
-    "build": "tsc -b && vite build",
-    "lint": "oxlint src vite.config.ts vitest.config.ts --deny-warnings",
+    "dev": "next dev -p 6969",
+    "typecheck": "next typegen && tsc --noEmit --pretty",
+    "build": "next build",
+    "lint": "oxlint app src next.config.ts vitest.config.ts --deny-warnings",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "preview": "vite preview"
+    "start": "next start -p 6969",
+    "preview": "next start -p 6969"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1120.0",
     "@babylonjs/core": "^9.22.1",
     "@babylonjs/gui": "^9.22.1",
     "@babylonjs/havok": "^1.3.14",
@@ -25,32 +27,30 @@
     "@babylonjs/materials": "^9.22.1",
     "@base-ui/react": "^1.7.0",
     "@fontsource-variable/google-sans-flex": "^5.3.1",
+    "@tailwindcss/postcss": "^4.3.3",
     "@tanstack/react-hotkeys": "^0.10.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.33.0",
     "motion": "^13.1.1",
+    "next": "^16.3.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router-dom": "^7.18.2",
     "tailwind-merge": "^3.6.0",
     "zod": "^4.4.3",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.4",
     "@vitest/coverage-v8": "^4.1.11",
     "jsdom": "^30.0.1",
     "oxlint": "^1.75.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
-    "vite": "^8.2.0",
     "vitest": "^4.1.11"
   }
 }

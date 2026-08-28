@@ -2,7 +2,6 @@ import type { MenuPanelId } from '../types/menu'
 import { getLevelPath } from './game-levels'
 
 export const HOME_PATH = '/'
-export const GAME_LEVEL_PATH = '/game/:levelId'
 export const LEVEL_ONE_PATH = getLevelPath('level-1')
 export const LEVEL_TWO_PATH = getLevelPath('level-2')
 export const LEVEL_THREE_PATH = getLevelPath('level-3')

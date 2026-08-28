@@ -1,8 +1,8 @@
 # Coastal Flight Simulator
 
-Desktop-first geometric flight game built with React, TypeScript, Tailwind CSS,
-Zustand, and Babylon.js. Start on the runway, fly through each level's ordered
-checkpoint rings, and return for a safe landing.
+Desktop-first geometric flight game built with Next.js, React, TypeScript,
+Tailwind CSS, Zustand, and Babylon.js. Start on the runway, fly through each
+level's ordered checkpoint rings, and return for a safe landing.
 
 ## Levels
 
@@ -31,8 +31,7 @@ three routes.
 - Low, Medium, and High performance presets persisted with Zustand and validated
   with Zod
 
-No map service, API key, runtime CDN, or external gameplay art/audio asset is
-required.
+No map service, runtime CDN, or external gameplay art/audio asset is required.
 
 ## Controls
 
@@ -55,29 +54,71 @@ final checkpoint, follow the runway guidance, touch down gently inside the
 marked landing zone, and slow to complete the level. A hard impact or obstacle
 collision crashes the aircraft; reset to retry cleanly.
 
-After completion, the optional pilot check-in logs the submitted username,
-email, level, and score to the browser console without persisting them.
+The first level opened on a device asks for a username and email. The pilot is
+saved in local storage and is not requested again. On startup and after every
+completed level, the client synchronizes the pilot and best scores through the
+Next.js API to Cloudflare R2.
 
 Coins are optional exploration rewards worth 25 points each. While genuinely
 airborne, the aircraft also earns one point every three seconds. Airtime pauses
 on the ground, while paused, and after a crash; resetting clears the full score.
 
-## Commands
+## Local setup
 
-Bun is recommended; Node.js 22.12+ with npm also works.
+Node.js 22.12+ with npm or Bun works. The development server always uses port
+6969.
 
 ```bash
-bun install
-bun run dev -- --host 127.0.0.1 --port 6969
-bun run typecheck
-bun run lint
-bun run test
-bun run build
+npm install
+cp .env.example .env.local
+npm run dev
+
+npm run typecheck
+npm run lint
+npm test
+npm run build
 ```
+
+Open <http://localhost:6969>.
+
+## Cloudflare R2
+
+This project reuses the Wanderer app's `wander-place-data` R2 bucket. Copy the
+same Object Read & Write credentials into this project's `.env.local`:
+
+```dotenv
+R2_ACCOUNT_ID=your-cloudflare-account-id
+R2_ACCESS_KEY_ID=your-r2-access-key-id
+R2_SECRET_ACCESS_KEY=your-r2-secret-access-key
+R2_BUCKET_NAME=wander-place-data
+```
+
+Every object owned by this game is isolated below the `flight-simulator/`
+prefix. Pilot records use
+`flight-simulator/users/<encoded-email>.json` inside the shared bucket:
+
+```json
+{
+  "email": "pilot@example.com",
+  "username": "Sky Pilot",
+  "levels": [{ "id": 1, "score": 1050, "passed": true }]
+}
+```
+
+`GET /api/player?email=...` loads a pilot and `PUT /api/player` creates or
+updates it. R2 credentials never enter the browser bundle. Without R2 variables,
+the game still remembers the pilot and scores locally while the API returns a
+clear `503` configuration response. This MVP intentionally has no account
+authentication or email uniqueness check; the same normalized email updates the
+same object and preserves the highest score per level.
 
 ## Architecture
 
 ```text
+app/
+├── (menu)/                       # Client-only menu pages and URL panels
+├── game/[levelId]/               # Client-only Babylon route (SSR disabled)
+└── api/player/route.ts           # Server-only R2 GET/PUT handler
 src/
 ├── audio/                         # Menu ambience and reusable UI sounds
 ├── components/game/               # React lifecycle and game-state overlays
@@ -91,15 +132,16 @@ src/
 │   ├── level-one-course.ts        # Checkpoints, score, and landing rules
 │   ├── level-one-hud.ts           # Babylon GUI instruments and guidance
 │   └── level-one-runtime.ts       # 120 Hz loop, cameras, state, and telemetry
-├── hooks/                         # React adapters for reusable services
-├── state/                         # Zod-validated Zustand settings/progression
-└── app-router.tsx                 # Route-backed menus and lazy game boundary
+├── hooks/                         # React adapters and pilot synchronization
+├── server/                        # Server-only R2 repository
+└── state/                         # Zod-validated Zustand settings/progression
 ```
 
-React owns routing, menus, settings, and full-screen states. Babylon owns the
-scene, cameras, HUD, and visual effects. The runtime advances flight logic at a
-stable 120 Hz and publishes throttled telemetry instead of rendering React every
-frame.
+Next.js App Router owns URLs while every visual page is dynamically mounted with
+SSR disabled. React owns menus, settings, and full-screen states. Babylon owns
+the scene, cameras, HUD, and visual effects. The runtime advances flight logic
+at a stable 120 Hz and publishes throttled telemetry instead of rendering React
+every frame. The R2 API route is intentionally server-only.
 
 ## Assets and licenses
 

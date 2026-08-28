@@ -1,4 +1,4 @@
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   getMenuPanelFromPath,
   HOME_PATH,
@@ -14,20 +14,26 @@ import { HomeHeader } from './home-header'
 import { MainMenu } from './main-menu'
 import { StatusRail } from './status-rail'
 
-export function HomeScreen() {
-  const location = useLocation()
-  const navigate = useNavigate()
+interface HomeScreenViewProps {
+  navigate: (path: string) => void
+  pathname: string
+}
+
+export function HomeScreenView({
+  navigate,
+  pathname,
+}: HomeScreenViewProps) {
   const audio = useMenuAudio()
-  const activePanel = getMenuPanelFromPath(location.pathname)
+  const activePanel = getMenuPanelFromPath(pathname)
 
   const openPanel = (panel: MenuPanelId) => {
     audio.play(panel === 'levels' ? 'confirm' : 'click')
-    void navigate(PANEL_PATHS[panel])
+    navigate(PANEL_PATHS[panel])
   }
 
   const closePanel = () => {
     audio.play('back')
-    void navigate(HOME_PATH)
+    navigate(HOME_PATH)
   }
 
   return (
@@ -57,9 +63,20 @@ export function HomeScreen() {
         activePanel={activePanel}
         audio={audio}
         onClose={closePanel}
-        onLaunchLevel={(levelId) => void navigate(getLevelPath(levelId))}
+        onLaunchLevel={(levelId) => navigate(getLevelPath(levelId))}
       />
-      <Outlet />
     </main>
+  )
+}
+
+export function HomeScreen() {
+  const pathname = usePathname()
+  const router = useRouter()
+
+  return (
+    <HomeScreenView
+      navigate={(path) => router.push(path)}
+      pathname={pathname}
+    />
   )
 }

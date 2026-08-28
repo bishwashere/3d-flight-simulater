@@ -8,10 +8,16 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+.next
+next-env.d.ts
+tsconfig.tsbuildinfo
 dist
 dist-ssr
 coverage
 *.local
+.env
+.env.*
+!.env.example
 .playwright-cli/
 output/
 

@@ -23,11 +23,6 @@ import {
   type LevelOneGameStatus,
   type LevelOnePerformanceSettings,
 } from '../../game/level-one-types'
-import {
-  logCompletedRunCheckIn,
-  type PlayerCheckIn,
-} from '../../lib/player-check-in'
-import { PlayerCheckInForm } from './player-check-in-form'
 import { useMenuAudio } from '../../hooks/use-menu-audio'
 import { ControlsPanel } from '../panels/controls-panel'
 import { SettingsPanel } from '../panels/settings-panel'
@@ -48,10 +43,6 @@ export interface LevelOneScreenProps {
 }
 
 type LoadingStatus = 'error' | 'loading' | 'ready'
-type CompletionCheckIn =
-  | { status: 'pending' }
-  | { status: 'skipped' }
-  | { status: 'submitted'; username: string }
 type PausePanel = 'controls' | 'settings' | null
 
 const INITIAL_GAME_STATUS: LevelOneGameStatus = {
@@ -167,8 +158,6 @@ export function LevelOneScreen({
     hadWebGpuFailureThisSession,
   )
   const [gameStatus, setGameStatus] = useState(INITIAL_GAME_STATUS)
-  const [completionCheckIn, setCompletionCheckIn] =
-    useState<CompletionCheckIn>({ status: 'pending' })
   const [heldControls, setHeldControls] =
     useState<HeldControls>(INITIAL_HELD_CONTROLS)
   const [pausePanel, setPausePanel] = useState<PausePanel>(null)
@@ -372,7 +361,6 @@ export function LevelOneScreen({
     setErrorMessage('')
     setPaused(false)
     setPausePanel(null)
-    setCompletionCheckIn({ status: 'pending' })
     gamePhaseRef.current = 'ready'
     setGameStatus(INITIAL_GAME_STATUS)
     heldCodesRef.current.clear()
@@ -506,7 +494,6 @@ export function LevelOneScreen({
   }
 
   const restart = () => {
-    setCompletionCheckIn({ status: 'pending' })
     setPausePanel(null)
     heldCodesRef.current.clear()
     setHeldControls(INITIAL_HELD_CONTROLS)
@@ -518,18 +505,6 @@ export function LevelOneScreen({
     setPausePanel(null)
     runtimeRef.current?.setPaused(true)
     onExit()
-  }
-
-  const submitPlayerCheckIn = (checkIn: PlayerCheckIn) => {
-    logCompletedRunCheckIn({
-      ...checkIn,
-      levelId: level.id,
-      score: gameStatus.score,
-    })
-    setCompletionCheckIn({
-      status: 'submitted',
-      username: checkIn.username,
-    })
   }
 
   const openPausePanel = (panel: Exclude<PausePanel, null>) => {
@@ -784,45 +759,31 @@ export function LevelOneScreen({
               Level {level.number} cleared
             </h1>
             <p className="mt-3 text-lg text-hud">{gameStatus.score} points</p>
-            {completionCheckIn.status === 'pending' ? (
-              <PlayerCheckInForm
-                onSkip={() => setCompletionCheckIn({ status: 'skipped' })}
-                onSubmit={submitPlayerCheckIn}
-              />
-            ) : (
-              <>
-                {completionCheckIn.status === 'submitted' ? (
-                  <p className="mt-5 border-l border-hud bg-hud/8 px-3 py-2 text-xs tracking-[0.1em] text-hud uppercase">
-                    Pilot logged · {completionCheckIn.username}
-                  </p>
-                ) : null}
-                <div className="mt-7 grid grid-cols-2 gap-3">
-                  {onNextLevel ? (
-                    <button
-                      className="col-span-2 flex items-center justify-center gap-2 rounded-md bg-ready px-4 py-3 font-bold text-flight-950 hover:brightness-110"
-                      onClick={onNextLevel}
-                      type="button"
-                    >
-                      Next level <ArrowRight aria-hidden="true" size={18} />
-                    </button>
-                  ) : null}
-                  <button
-                    className="rounded-md bg-hud px-4 py-3 font-bold text-flight-950 hover:bg-hud-bright"
-                    onClick={restart}
-                    type="button"
-                  >
-                    Fly again
-                  </button>
-                  <button
-                    className="rounded-md border border-flight-700 px-4 py-3 font-semibold hover:border-flight-500"
-                    onClick={exitLevel}
-                    type="button"
-                  >
-                    Exit
-                  </button>
-                </div>
-              </>
-            )}
+            <div className="mt-7 grid grid-cols-2 gap-3">
+              {onNextLevel ? (
+                <button
+                  className="col-span-2 flex items-center justify-center gap-2 rounded-md bg-ready px-4 py-3 font-bold text-flight-950 hover:brightness-110"
+                  onClick={onNextLevel}
+                  type="button"
+                >
+                  Next level <ArrowRight aria-hidden="true" size={18} />
+                </button>
+              ) : null}
+              <button
+                className="rounded-md bg-hud px-4 py-3 font-bold text-flight-950 hover:bg-hud-bright"
+                onClick={restart}
+                type="button"
+              >
+                Fly again
+              </button>
+              <button
+                className="rounded-md border border-flight-700 px-4 py-3 font-semibold hover:border-flight-500"
+                onClick={exitLevel}
+                type="button"
+              >
+                Exit
+              </button>
+            </div>
           </section>
         </div>
       ) : null}
