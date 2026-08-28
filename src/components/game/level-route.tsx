@@ -84,6 +84,7 @@ export function LevelRoute() {
 
   return (
     <LevelOneScreen
+      key={level.id}
       gameplaySoundsEnabled={gameplaySoundsEnabled}
       level={level}
       masterVolume={masterVolume}

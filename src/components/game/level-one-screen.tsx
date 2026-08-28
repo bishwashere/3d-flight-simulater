@@ -10,7 +10,7 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useHotkeys } from '@tanstack/react-hotkeys'
 
 import { gameAmbience } from '../../audio/game-ambience'
@@ -23,6 +23,11 @@ import {
   type LevelOneGameStatus,
   type LevelOnePerformanceSettings,
 } from '../../game/level-one-types'
+import {
+  logCompletedRunCheckIn,
+  type PlayerCheckIn,
+} from '../../lib/player-check-in'
+import { PlayerCheckInForm } from './player-check-in-form'
 import { useMenuAudio } from '../../hooks/use-menu-audio'
 import { ControlsPanel } from '../panels/controls-panel'
 import { SettingsPanel } from '../panels/settings-panel'
@@ -43,6 +48,10 @@ export interface LevelOneScreenProps {
 }
 
 type LoadingStatus = 'error' | 'loading' | 'ready'
+type CompletionCheckIn =
+  | { status: 'pending' }
+  | { status: 'skipped' }
+  | { status: 'submitted'; username: string }
 type PausePanel = 'controls' | 'settings' | null
 
 const INITIAL_GAME_STATUS: LevelOneGameStatus = {
@@ -104,6 +113,15 @@ function controlsEqual(left: HeldControls, right: HeldControls): boolean {
   )
 }
 
+function isInteractiveKeyboardTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    target.closest(
+      'input, textarea, select, button, a[href], [contenteditable="true"], [role="slider"]',
+    ) !== null
+  )
+}
+
 function hadWebGpuFailureThisSession(): boolean {
   try {
     return sessionStorage.getItem(WEBGPU_FAILURE_SESSION_KEY) === '1'
@@ -137,6 +155,7 @@ export function LevelOneScreen({
   const menuAudio = useMenuAudio()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const completionReportedRef = useRef(false)
+  const gamePhaseRef = useRef<LevelOneGameStatus['phase']>('ready')
   const gameplaySoundsEnabledRef = useRef(gameplaySoundsEnabled)
   const heldCodesRef = useRef<Set<string>>(new Set())
   const masterVolumeRef = useRef(masterVolume)
@@ -148,6 +167,8 @@ export function LevelOneScreen({
     hadWebGpuFailureThisSession,
   )
   const [gameStatus, setGameStatus] = useState(INITIAL_GAME_STATUS)
+  const [completionCheckIn, setCompletionCheckIn] =
+    useState<CompletionCheckIn>({ status: 'pending' })
   const [heldControls, setHeldControls] =
     useState<HeldControls>(INITIAL_HELD_CONTROLS)
   const [pausePanel, setPausePanel] = useState<PausePanel>(null)
@@ -163,6 +184,14 @@ export function LevelOneScreen({
     () => resolveLevelOnePerformance(performance),
     [performance],
   )
+  const updateGameStatus = useCallback((nextStatus: LevelOneGameStatus) => {
+    gamePhaseRef.current = nextStatus.phase
+    if (nextStatus.phase === 'complete') {
+      heldCodesRef.current.clear()
+      setHeldControls(INITIAL_HELD_CONTROLS)
+    }
+    setGameStatus(nextStatus)
+  }, [])
 
   useHotkeys(
     [
@@ -186,10 +215,19 @@ export function LevelOneScreen({
         callback: () => runtimeRef.current?.releasePointerLockOrPause(),
         hotkey: 'Escape',
       },
+      {
+        callback: () => runtimeRef.current?.completeLevel(),
+        hotkey: 'L',
+        options: {
+          ignoreInputs: true,
+          preventDefault: true,
+          requireReset: true,
+        },
+      },
     ],
     {
-      enabled: status === 'ready',
-      ignoreInputs: false,
+      enabled: status === 'ready' && gameStatus.phase !== 'complete',
+      ignoreInputs: true,
     },
   )
 
@@ -206,6 +244,10 @@ export function LevelOneScreen({
   }, [gameStatus.phase, gameStatus.score, onComplete])
 
   useEffect(() => {
+    if (status !== 'ready' || gameStatus.phase === 'complete') {
+      return
+    }
+
     runtimeRef.current?.setControlInput({
       brakes: heldControls.brakes,
       pitch: Number(heldControls.pitchUp) - Number(heldControls.pitchDown),
@@ -214,7 +256,7 @@ export function LevelOneScreen({
       throttleUp: heldControls.throttleUp,
       yaw: Number(heldControls.yawRight) - Number(heldControls.yawLeft),
     })
-  }, [heldControls])
+  }, [gameStatus.phase, heldControls, status])
 
   useEffect(() => {
     runtimeRef.current?.setMasterVolume(masterVolume)
@@ -255,7 +297,13 @@ export function LevelOneScreen({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (status !== 'ready') {
+      if (
+        status !== 'ready' ||
+        paused ||
+        gamePhaseRef.current === 'complete' ||
+        event.defaultPrevented ||
+        isInteractiveKeyboardTarget(event.target)
+      ) {
         return
       }
 
@@ -289,9 +337,16 @@ export function LevelOneScreen({
         return
       }
 
-      event.preventDefault()
       heldCodesRef.current.delete(event.code)
       syncHeldControls()
+      if (
+        !paused &&
+        gamePhaseRef.current !== 'complete' &&
+        !event.defaultPrevented &&
+        !isInteractiveKeyboardTarget(event.target)
+      ) {
+        event.preventDefault()
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
@@ -304,7 +359,7 @@ export function LevelOneScreen({
       window.removeEventListener('blur', clearHeldControls)
       document.removeEventListener('visibilitychange', clearHeldControls)
     }
-  }, [status])
+  }, [paused, status])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -316,6 +371,9 @@ export function LevelOneScreen({
     setStatus('loading')
     setErrorMessage('')
     setPaused(false)
+    setPausePanel(null)
+    setCompletionCheckIn({ status: 'pending' })
+    gamePhaseRef.current = 'ready'
     setGameStatus(INITIAL_GAME_STATUS)
     heldCodesRef.current.clear()
     setHeldControls(INITIAL_HELD_CONTROLS)
@@ -347,8 +405,12 @@ export function LevelOneScreen({
               setRetryKey((value) => value + 1)
             }
           },
-          onGameStatus: setGameStatus,
+          onGameStatus: updateGameStatus,
           onPauseChange: (nextPaused) => {
+            if (nextPaused) {
+              heldCodesRef.current.clear()
+              setHeldControls(INITIAL_HELD_CONTROLS)
+            }
             setPaused(nextPaused)
             if (!nextPaused) {
               setPausePanel(null)
@@ -405,10 +467,15 @@ export function LevelOneScreen({
     level,
     resolvedAssets,
     retryKey,
+    updateGameStatus,
   ])
 
   useEffect(() => {
-    const pauseAfterFocusLoss = () => runtimeRef.current?.setPaused(true)
+    const pauseAfterFocusLoss = () => {
+      if (gamePhaseRef.current !== 'complete') {
+        runtimeRef.current?.setPaused(true)
+      }
+    }
     const pauseWhenHidden = () => {
       if (document.hidden) {
         pauseAfterFocusLoss()
@@ -439,7 +506,10 @@ export function LevelOneScreen({
   }
 
   const restart = () => {
+    setCompletionCheckIn({ status: 'pending' })
     setPausePanel(null)
+    heldCodesRef.current.clear()
+    setHeldControls(INITIAL_HELD_CONTROLS)
     runtimeRef.current?.resetGame()
     runtimeRef.current?.setPaused(false)
   }
@@ -448,6 +518,18 @@ export function LevelOneScreen({
     setPausePanel(null)
     runtimeRef.current?.setPaused(true)
     onExit()
+  }
+
+  const submitPlayerCheckIn = (checkIn: PlayerCheckIn) => {
+    logCompletedRunCheckIn({
+      ...checkIn,
+      levelId: level.id,
+      score: gameStatus.score,
+    })
+    setCompletionCheckIn({
+      status: 'submitted',
+      username: checkIn.username,
+    })
   }
 
   const openPausePanel = (panel: Exclude<PausePanel, null>) => {
@@ -533,7 +615,7 @@ export function LevelOneScreen({
         </div>
       ) : null}
 
-      {status === 'ready' && !paused ? (
+      {status === 'ready' && !paused && gameStatus.phase !== 'complete' ? (
         <div className="absolute right-6 top-6 flex flex-col gap-2">
           <button
             aria-label={`Pause Level ${level.number}`}
@@ -686,39 +768,61 @@ export function LevelOneScreen({
 
       {status === 'ready' && gameStatus.phase === 'complete' && !paused ? (
         <div className="absolute inset-0 grid place-items-center bg-flight-950/45 px-6 backdrop-blur-[2px]">
-          <section className="w-full max-w-sm border-l-2 border-ready bg-flight-950/92 p-7 shadow-hud">
+          <section
+            aria-labelledby={`level-${level.number}-complete-title`}
+            aria-modal="true"
+            className="w-full max-w-md border-l-2 border-ready bg-flight-950/92 p-7 shadow-hud"
+            role="dialog"
+          >
             <p className="text-xs font-bold tracking-[0.22em] text-ready">
               RUN COMPLETE
             </p>
-            <h1 className="mt-2 text-4xl font-semibold">
+            <h1
+              className="mt-2 text-4xl font-semibold"
+              id={`level-${level.number}-complete-title`}
+            >
               Level {level.number} cleared
             </h1>
             <p className="mt-3 text-lg text-hud">{gameStatus.score} points</p>
-            <div className="mt-7 grid grid-cols-2 gap-3">
-              {onNextLevel ? (
-                <button
-                  className="col-span-2 flex items-center justify-center gap-2 rounded-md bg-ready px-4 py-3 font-bold text-flight-950 hover:brightness-110"
-                  onClick={onNextLevel}
-                  type="button"
-                >
-                  Next level <ArrowRight aria-hidden="true" size={18} />
-                </button>
-              ) : null}
-              <button
-                className="rounded-md bg-hud px-4 py-3 font-bold text-flight-950 hover:bg-hud-bright"
-                onClick={restart}
-                type="button"
-              >
-                Fly again
-              </button>
-              <button
-                className="rounded-md border border-flight-700 px-4 py-3 font-semibold hover:border-flight-500"
-                onClick={exitLevel}
-                type="button"
-              >
-                Exit
-              </button>
-            </div>
+            {completionCheckIn.status === 'pending' ? (
+              <PlayerCheckInForm
+                onSkip={() => setCompletionCheckIn({ status: 'skipped' })}
+                onSubmit={submitPlayerCheckIn}
+              />
+            ) : (
+              <>
+                {completionCheckIn.status === 'submitted' ? (
+                  <p className="mt-5 border-l border-hud bg-hud/8 px-3 py-2 text-xs tracking-[0.1em] text-hud uppercase">
+                    Pilot logged · {completionCheckIn.username}
+                  </p>
+                ) : null}
+                <div className="mt-7 grid grid-cols-2 gap-3">
+                  {onNextLevel ? (
+                    <button
+                      className="col-span-2 flex items-center justify-center gap-2 rounded-md bg-ready px-4 py-3 font-bold text-flight-950 hover:brightness-110"
+                      onClick={onNextLevel}
+                      type="button"
+                    >
+                      Next level <ArrowRight aria-hidden="true" size={18} />
+                    </button>
+                  ) : null}
+                  <button
+                    className="rounded-md bg-hud px-4 py-3 font-bold text-flight-950 hover:bg-hud-bright"
+                    onClick={restart}
+                    type="button"
+                  >
+                    Fly again
+                  </button>
+                  <button
+                    className="rounded-md border border-flight-700 px-4 py-3 font-semibold hover:border-flight-500"
+                    onClick={exitLevel}
+                    type="button"
+                  >
+                    Exit
+                  </button>
+                </div>
+              </>
+            )}
           </section>
         </div>
       ) : null}

@@ -79,6 +79,17 @@ export class LevelOneCourse {
     }
   }
 
+  forceComplete(): LevelOneCourseEvent | undefined {
+    if (this.phase === 'complete') {
+      return undefined
+    }
+
+    const remainingCheckpoints = this.checkpoints.length - this.checkpointIndex
+    this.score += remainingCheckpoints * CHECKPOINT_SCORE
+    this.checkpointIndex = this.checkpoints.length
+    return this.finish(0)
+  }
+
   reset(): void {
     this.airborneSeconds = 0
     this.airtimeScore = 0
@@ -160,12 +171,16 @@ export class LevelOneCourse {
         0,
         Math.round((3.5 - Math.abs(frame.verticalSpeed)) * 40),
       )
-      this.score += LANDING_SCORE + smoothLandingBonus
-      this.phase = 'complete'
-      return { score: this.score, type: 'complete' }
+      return this.finish(smoothLandingBonus)
     }
 
     return undefined
+  }
+
+  private finish(smoothLandingBonus: number): LevelOneCourseEvent {
+    this.score += LANDING_SCORE + smoothLandingBonus
+    this.phase = 'complete'
+    return { score: this.score, type: 'complete' }
   }
 
   getSnapshot(position: CourseVector): LevelOneCourseSnapshot {
