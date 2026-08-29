@@ -3,29 +3,29 @@ import { AtSign, LogIn, UserRound } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 
 import {
-  playerCheckInSchema,
-  type PlayerCheckIn,
-} from '../../lib/player-check-in'
+  pilotIdentitySchema,
+  type PilotIdentity,
+} from '../../lib/pilot-profile'
 import type { IconComponent } from '../../types/icon'
 
-interface PlayerCheckInFormProps {
-  onSkip: () => void
-  onSubmit: (checkIn: PlayerCheckIn) => void
+interface PilotProfileFormProps {
+  onSubmit: (identity: PilotIdentity) => void
+  submitting?: boolean
 }
 
-type PlayerCheckInField = keyof PlayerCheckIn
-type PlayerCheckInErrors = Partial<Record<PlayerCheckInField, string>>
+type PilotProfileField = keyof PilotIdentity
+type PilotProfileErrors = Partial<Record<PilotProfileField, string>>
 
-interface PlayerFieldDefinition {
+interface PilotFieldDefinition {
   autoComplete: 'email' | 'username'
   icon: IconComponent
   label: string
-  name: PlayerCheckInField
+  name: PilotProfileField
   placeholder: string
   type: 'email' | 'text'
 }
 
-const PLAYER_FIELDS: readonly PlayerFieldDefinition[] = [
+const PILOT_FIELDS: readonly PilotFieldDefinition[] = [
   {
     autoComplete: 'username',
     icon: UserRound,
@@ -44,20 +44,20 @@ const PLAYER_FIELDS: readonly PlayerFieldDefinition[] = [
   },
 ]
 
-const EMPTY_VALUES: PlayerCheckIn = {
+const EMPTY_VALUES: PilotIdentity = {
   email: '',
   username: '',
 }
 
-export function PlayerCheckInForm({
-  onSkip,
+export function PilotProfileForm({
   onSubmit,
-}: PlayerCheckInFormProps) {
+  submitting = false,
+}: PilotProfileFormProps) {
   const formId = useId()
-  const [errors, setErrors] = useState<PlayerCheckInErrors>({})
-  const [values, setValues] = useState<PlayerCheckIn>(EMPTY_VALUES)
+  const [errors, setErrors] = useState<PilotProfileErrors>({})
+  const [values, setValues] = useState<PilotIdentity>(EMPTY_VALUES)
 
-  const updateField = (field: PlayerCheckInField, value: string) => {
+  const updateField = (field: PilotProfileField, value: string) => {
     setValues((currentValues) => ({
       ...currentValues,
       [field]: value,
@@ -70,7 +70,7 @@ export function PlayerCheckInForm({
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const result = playerCheckInSchema.safeParse(values)
+    const result = pilotIdentitySchema.safeParse(values)
 
     if (!result.success) {
       const fieldErrors = result.error.flatten().fieldErrors
@@ -87,22 +87,22 @@ export function PlayerCheckInForm({
 
   return (
     <form
-      aria-label="Optional pilot check-in"
+      aria-label="Pilot profile"
       className="mt-6 border-t border-flight-500/25 pt-5"
       noValidate
       onSubmit={handleSubmit}
     >
       <div className="mb-4 flex items-center justify-between gap-4">
         <h2 className="text-xs font-bold tracking-[0.18em] text-flight-100 uppercase">
-          Pilot check-in
+          Pilot profile
         </h2>
         <span className="border border-hud/30 bg-hud/10 px-2 py-1 text-[0.58rem] font-bold tracking-[0.15em] text-hud uppercase">
-          Optional
+          One time
         </span>
       </div>
 
       <div className="grid gap-3">
-        {PLAYER_FIELDS.map((field) => {
+        {PILOT_FIELDS.map((field) => {
           const fieldId = `${formId}-${field.name}`
           const errorId = `${fieldId}-error`
           const error = errors[field.name]
@@ -130,6 +130,7 @@ export function PlayerCheckInForm({
                   autoFocus={field.name === 'username'}
                   className="h-11 w-full border border-flight-500/35 bg-flight-900/85 pr-3 pl-10 text-sm text-flight-100 outline-none transition-colors placeholder:text-flight-500/70 hover:border-flight-500 focus:border-hud focus:shadow-hud aria-invalid:border-critical aria-invalid:focus:border-critical"
                   id={fieldId}
+                  disabled={submitting}
                   name={field.name}
                   onChange={(event) => updateField(field.name, event.target.value)}
                   placeholder={field.placeholder}
@@ -151,21 +152,14 @@ export function PlayerCheckInForm({
         })}
       </div>
 
-      <div className="mt-5 grid grid-cols-[1fr_auto] gap-3">
-        <Button
-          className="flex items-center justify-center gap-2 bg-hud px-4 py-3 text-sm font-bold text-flight-950 hover:bg-hud-bright focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hud-bright"
-          type="submit"
-        >
-          Check in <LogIn aria-hidden={true} size={17} />
-        </Button>
-        <Button
-          className="border border-flight-700 px-4 py-3 text-sm font-semibold text-flight-300 hover:border-flight-500 hover:text-flight-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hud"
-          onClick={onSkip}
-          type="button"
-        >
-          Skip
-        </Button>
-      </div>
+      <Button
+        className="mt-5 flex w-full items-center justify-center gap-2 bg-hud px-4 py-3 text-sm font-bold text-flight-950 hover:bg-hud-bright focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hud-bright"
+        disabled={submitting}
+        type="submit"
+      >
+        {submitting ? 'Syncing pilot' : 'Save and fly'}{' '}
+        <LogIn aria-hidden={true} size={17} />
+      </Button>
     </form>
   )
 }

@@ -1,15 +1,21 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { useState } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { AppRoutes } from './app-router'
+import { HomeScreenView } from './components/home/home-screen'
 import { useProgressionStore, useSettingsStore } from './state'
 
 function renderLauncher(initialPath = '/') {
-  return render(
-    <MemoryRouter initialEntries={[initialPath]}>
-      <AppRoutes />
-    </MemoryRouter>,
-  )
+  function Launcher() {
+    const [pathname, setPathname] = useState(initialPath)
+    return (
+      <>
+        <HomeScreenView navigate={setPathname} pathname={pathname} />
+        <output data-testid="current-path">{pathname}</output>
+      </>
+    )
+  }
+
+  return render(<Launcher />)
 }
 
 describe('home menu', () => {
@@ -50,6 +56,19 @@ describe('home menu', () => {
     expect(
       screen.getByRole('button', { name: /locked level 3: coastal circuit/i }),
     ).toBeDisabled()
+  })
+
+  it('navigates to the selected level through its real URL', () => {
+    renderLauncher()
+
+    fireEvent.click(screen.getByRole('button', { name: /start game/i }))
+    fireEvent.click(
+      screen.getByRole('button', { name: /level 1: first flight/i }),
+    )
+
+    expect(screen.getByTestId('current-path')).toHaveTextContent(
+      '/game/level-1',
+    )
   })
 
   it('shows completion, best score, and the newly unlocked level', () => {

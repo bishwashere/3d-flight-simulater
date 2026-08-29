@@ -11,7 +11,7 @@ export function HomeBackdrop() {
     >
       <motion.img
         className="absolute inset-0 h-full w-full scale-[1.02] object-cover object-center contrast-[1.04] saturate-[0.9]"
-        src={coastalFlightMenu}
+        src={coastalFlightMenu.src}
         alt=""
         initial={false}
         animate={

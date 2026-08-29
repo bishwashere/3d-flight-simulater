@@ -18,3 +18,9 @@ export {
   type ProgressionData,
   type ProgressionState,
 } from './progression-store'
+
+export {
+  PILOT_PROFILE_STORAGE_KEY,
+  usePilotProfileStore,
+  type PilotProfileState,
+} from './pilot-profile-store'
