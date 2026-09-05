@@ -21,7 +21,7 @@ export const CONTROL_GROUPS: readonly ControlGroup[] = [
   {
     title: 'Aircraft systems',
     bindings: [
-      { key: 'B', action: 'Wheel brakes' },
+      { key: 'B', action: 'Wheel brakes / bank landed score' },
       { key: 'R', action: 'Reset aircraft' },
     ],
   },

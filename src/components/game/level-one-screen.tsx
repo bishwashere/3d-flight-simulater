@@ -1,5 +1,4 @@
 import {
-  ArrowRight,
   Keyboard,
   LogOut,
   Music,
@@ -14,7 +13,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useHotkeys } from '@tanstack/react-hotkeys'
 
 import { gameAmbience } from '../../audio/game-ambience'
-import type { GameLevelDefinition } from '../../config/game-levels'
 import { LevelOneRuntime } from '../../game/level-one-runtime'
 import { resolveLevelOnePerformance } from '../../game/level-one-performance'
 import {
@@ -30,14 +28,12 @@ import { SettingsPanel } from '../panels/settings-panel'
 export interface LevelOneScreenProps {
   assets?: LevelOneAssets
   gameplaySoundsEnabled?: boolean
-  level: GameLevelDefinition
   masterVolume?: number
   musicEnabled?: boolean
   onComplete: (score: number) => void
   onExit: () => void
   onGameplaySoundsEnabledChange?: (enabled: boolean) => void
   onMusicEnabledChange?: (enabled: boolean) => void
-  onNextLevel?: () => void
   performance?: LevelOnePerformanceSettings
   pointerYoke?: boolean
 }
@@ -46,7 +42,11 @@ type LoadingStatus = 'error' | 'loading' | 'ready'
 type PausePanel = 'controls' | 'settings' | null
 
 const INITIAL_GAME_STATUS: LevelOneGameStatus = {
+  airborneSeconds: 0,
+  coinsCollected: 0,
+  distanceTravelled: 0,
   phase: 'ready',
+  regionsExplored: 0,
   score: 0,
 }
 
@@ -131,14 +131,12 @@ function rememberWebGpuFailure(): void {
 export function LevelOneScreen({
   assets,
   gameplaySoundsEnabled = true,
-  level,
   masterVolume = 0.7,
   musicEnabled = true,
   onComplete,
   onExit,
   onGameplaySoundsEnabledChange,
   onMusicEnabledChange,
-  onNextLevel,
   performance,
   pointerYoke = false,
 }: LevelOneScreenProps) {
@@ -202,15 +200,6 @@ export function LevelOneScreen({
       {
         callback: () => runtimeRef.current?.releasePointerLockOrPause(),
         hotkey: 'Escape',
-      },
-      {
-        callback: () => runtimeRef.current?.completeLevel(),
-        hotkey: 'L',
-        options: {
-          ignoreInputs: true,
-          preventDefault: true,
-          requireReset: true,
-        },
       },
     ],
     {
@@ -356,8 +345,7 @@ export function LevelOneScreen({
     setGameStatus(INITIAL_GAME_STATUS)
     heldCodesRef.current.clear()
     setHeldControls(INITIAL_HELD_CONTROLS)
-    canvas.dataset.level = level.id
-    canvas.dataset.theme = level.theme
+    canvas.dataset.mode = 'unlimited'
 
     const initialize = async () => {
       // React Strict Mode mounts, cleans up, then mounts effects again in
@@ -375,7 +363,6 @@ export function LevelOneScreen({
           assets: resolvedAssets,
           forceWebGl2,
           gameplayAudioEnabled: gameplaySoundsEnabledRef.current,
-          level,
           masterVolume: masterVolumeRef.current,
           onBackendFailure: () => {
             if (!cancelled) {
@@ -404,9 +391,8 @@ export function LevelOneScreen({
             canvas.dataset.score = telemetry.score.toFixed(0)
             canvas.dataset.airborneSeconds = telemetry.airborneSeconds.toFixed(1)
             canvas.dataset.coinsCollected = telemetry.coinsCollected.toString()
-            canvas.dataset.coinCount = telemetry.coinCount.toString()
-            canvas.dataset.checkpointCount = telemetry.checkpointCount.toString()
-            canvas.dataset.checkpointIndex = telemetry.checkpointIndex.toString()
+            canvas.dataset.distanceTravelled = telemetry.distanceTravelled.toFixed(0)
+            canvas.dataset.regionsExplored = telemetry.regionsExplored.toString()
             canvas.dataset.speed = telemetry.speed.toFixed(1)
           },
           performance: performanceRef.current,
@@ -423,11 +409,11 @@ export function LevelOneScreen({
         canvas.focus()
       } catch (error) {
         if (!cancelled) {
-          console.error(`Level ${level.number} startup failed.`, error)
+          console.error('Unlimited flight startup failed.', error)
           setErrorMessage(
             error instanceof Error
               ? error.message
-              : `The Level ${level.number} renderer could not start.`,
+              : 'The unlimited-flight renderer could not start.',
           )
           setStatus('error')
         }
@@ -443,7 +429,6 @@ export function LevelOneScreen({
     }
   }, [
     forceWebGl2,
-    level,
     resolvedAssets,
     retryKey,
     updateGameStatus,
@@ -519,9 +504,9 @@ export function LevelOneScreen({
   return (
     <main className="fixed inset-0 isolate overflow-hidden bg-flight-950 text-flight-100">
       <canvas
-        key={`${level.id}-${forceWebGl2 ? 'webgl2-canvas' : 'automatic-canvas'}`}
+        key={forceWebGl2 ? 'webgl2-canvas' : 'automatic-canvas'}
         ref={canvasRef}
-        aria-label={`Level ${level.number} ${level.name} flight course`}
+        aria-label="Unlimited procedural flight world"
         className="block h-full w-full cursor-crosshair outline-none"
         onClick={() => {
           if (pointerYoke) {
@@ -536,7 +521,7 @@ export function LevelOneScreen({
           <div className="flex flex-col items-center gap-4 text-center">
             <span className="size-9 animate-spin rounded-full border-2 border-flight-700 border-t-hud" />
             <p className="text-sm font-semibold tracking-[0.2em] text-hud">
-              BUILDING {level.name.toUpperCase()}
+              GENERATING OPEN WORLD
             </p>
           </div>
         </div>
@@ -549,7 +534,7 @@ export function LevelOneScreen({
               RENDERER UNAVAILABLE
             </p>
             <h1 className="mt-3 text-2xl font-semibold">
-              Level {level.number} could not start
+              Unlimited flight could not start
             </h1>
             <p className="mt-3 text-sm leading-6 text-flight-300">
               {errorMessage}
@@ -577,7 +562,7 @@ export function LevelOneScreen({
       {status === 'ready' && !paused && gameStatus.phase !== 'complete' ? (
         <div className="absolute right-6 top-6 flex flex-col gap-2">
           <button
-            aria-label={`Pause Level ${level.number}`}
+            aria-label="Pause flight"
             className="grid size-11 place-items-center rounded-md border border-flight-500/40 bg-flight-950/65 text-flight-100 backdrop-blur hover:border-hud/60 hover:text-hud"
             onClick={() => runtimeRef.current?.setPaused(true)}
             title="Pause"
@@ -625,15 +610,15 @@ export function LevelOneScreen({
       {status === 'ready' && paused ? (
         <div className="absolute inset-0 grid place-items-center bg-flight-950/65 px-6 backdrop-blur-sm">
           <section
-            aria-labelledby="level-one-paused-title"
+            aria-labelledby="flight-paused-title"
             aria-modal="true"
             className="w-full max-w-sm rounded-xl border border-flight-700 bg-flight-900/95 p-7 shadow-panel"
             role="dialog"
           >
             <p className="text-xs font-semibold tracking-[0.2em] text-hud">
-              LEVEL {level.number}
+              UNLIMITED FLIGHT
             </p>
-            <h1 id="level-one-paused-title" className="mt-2 text-3xl font-semibold">
+            <h1 id="flight-paused-title" className="mt-2 text-3xl font-semibold">
               Paused
             </h1>
 
@@ -650,7 +635,7 @@ export function LevelOneScreen({
                 onClick={restart}
                 type="button"
               >
-                <RotateCcw aria-hidden="true" size={18} /> Restart level
+                <RotateCcw aria-hidden="true" size={18} /> Restart flight
               </button>
               <button
                 className="flex items-center gap-3 rounded-md border border-flight-700 px-4 py-3 text-left font-semibold hover:border-flight-500"
@@ -671,7 +656,7 @@ export function LevelOneScreen({
                 onClick={exitLevel}
                 type="button"
               >
-                <LogOut aria-hidden="true" size={18} /> Exit to levels
+                <LogOut aria-hidden="true" size={18} /> Exit to menu
               </button>
             </div>
           </section>
@@ -708,31 +693,53 @@ export function LevelOneScreen({
       {status === 'ready' && gameStatus.phase === 'complete' && !paused ? (
         <div className="absolute inset-0 grid place-items-center bg-flight-950/45 px-6 backdrop-blur-[2px]">
           <section
-            aria-labelledby={`level-${level.number}-complete-title`}
+            aria-labelledby="flight-complete-title"
             aria-modal="true"
             className="w-full max-w-md border-l-2 border-ready bg-flight-950/92 p-7 shadow-hud"
             role="dialog"
           >
             <p className="text-xs font-bold tracking-[0.22em] text-ready">
-              RUN COMPLETE
+              SAFE LANDING · SCORE BANKED
             </p>
             <h1
               className="mt-2 text-4xl font-semibold"
-              id={`level-${level.number}-complete-title`}
+              id="flight-complete-title"
             >
-              Level {level.number} cleared
+              Flight complete
             </h1>
-            <p className="mt-3 text-lg text-hud">{gameStatus.score} points</p>
+            <p className="mt-3 text-sm tracking-[0.16em] text-flight-300 uppercase">
+              Accumulated score
+            </p>
+            <p className="mt-1 text-4xl font-semibold text-hud">
+              {gameStatus.score.toLocaleString()} points
+            </p>
+            <dl className="mt-5 grid grid-cols-2 gap-3 border-y border-flight-700/70 py-4 text-sm">
+              <div>
+                <dt className="text-flight-300">Distance</dt>
+                <dd className="mt-1 font-semibold text-flight-100">
+                  {(gameStatus.distanceTravelled / 1_000).toFixed(1)} km
+                </dd>
+              </div>
+              <div>
+                <dt className="text-flight-300">Air time</dt>
+                <dd className="mt-1 font-semibold text-flight-100">
+                  {Math.floor(gameStatus.airborneSeconds / 60)}m {Math.floor(gameStatus.airborneSeconds % 60)}s
+                </dd>
+              </div>
+              <div>
+                <dt className="text-flight-300">Regions</dt>
+                <dd className="mt-1 font-semibold text-flight-100">
+                  {gameStatus.regionsExplored}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-flight-300">Coins</dt>
+                <dd className="mt-1 font-semibold text-flight-100">
+                  {gameStatus.coinsCollected}
+                </dd>
+              </div>
+            </dl>
             <div className="mt-7 grid grid-cols-2 gap-3">
-              {onNextLevel ? (
-                <button
-                  className="col-span-2 flex items-center justify-center gap-2 rounded-md bg-ready px-4 py-3 font-bold text-flight-950 hover:brightness-110"
-                  onClick={onNextLevel}
-                  type="button"
-                >
-                  Next level <ArrowRight aria-hidden="true" size={18} />
-                </button>
-              ) : null}
               <button
                 className="rounded-md bg-hud px-4 py-3 font-bold text-flight-950 hover:bg-hud-bright"
                 onClick={restart}

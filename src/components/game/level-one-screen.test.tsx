@@ -1,25 +1,26 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { GAME_LEVELS } from '../../config/game-levels'
+import type { LevelOneGameStatus } from '../../game/level-one-types'
 import { useProgressionStore } from '../../state'
 import { LevelOneScreen } from './level-one-screen'
 
 const runtimeMock = vi.hoisted(() => {
-  let onGameStatus:
-    | ((status: { phase: 'complete' | 'ready'; score: number }) => void)
-    | undefined
+  let onGameStatus: ((status: LevelOneGameStatus) => void) | undefined
 
+  const readyStatus: LevelOneGameStatus = {
+    airborneSeconds: 0,
+    coinsCollected: 0,
+    distanceTravelled: 0,
+    phase: 'ready',
+    regionsExplored: 0,
+    score: 0,
+  }
   const runtime = {
-    completeLevel: vi.fn(() => {
-      onGameStatus?.({ phase: 'complete', score: 600 })
-    }),
     cycleCamera: vi.fn(),
     dispose: vi.fn(),
     releasePointerLockOrPause: vi.fn(),
-    resetGame: vi.fn(() => {
-      onGameStatus?.({ phase: 'ready', score: 0 })
-    }),
+    resetGame: vi.fn(() => onGameStatus?.(readyStatus)),
     setControlInput: vi.fn(),
     setGameplayAudioEnabled: vi.fn(),
     setMasterVolume: vi.fn(),
@@ -33,17 +34,21 @@ const runtimeMock = vi.hoisted(() => {
     create: vi.fn(
       async (
         _canvas: HTMLCanvasElement,
-        options: {
-          onGameStatus?: (status: {
-            phase: 'complete' | 'ready'
-            score: number
-          }) => void
-        },
+        options: { onGameStatus?: (status: LevelOneGameStatus) => void },
       ) => {
         onGameStatus = options.onGameStatus
         return runtime
       },
     ),
+    finish: () =>
+      onGameStatus?.({
+        airborneSeconds: 185,
+        coinsCollected: 7,
+        distanceTravelled: 12_450,
+        phase: 'complete',
+        regionsExplored: 5,
+        score: 1_840,
+      }),
     reset: () => {
       onGameStatus = undefined
     },
@@ -55,7 +60,7 @@ vi.mock('../../game/level-one-runtime', () => ({
   LevelOneRuntime: { create: runtimeMock.create },
 }))
 
-describe('LevelOneScreen completion flow', () => {
+describe('unlimited flight completion flow', () => {
   beforeEach(() => {
     localStorage.clear()
     useProgressionStore.getState().resetProgression()
@@ -63,68 +68,53 @@ describe('LevelOneScreen completion flow', () => {
     vi.clearAllMocks()
   })
 
-  it('uses the normal completion callback and unlocks the next level', async () => {
+  it('shows the accumulated score and flight stats after a manual landing', async () => {
     render(
       <LevelOneScreen
-        level={GAME_LEVELS[0]}
         onComplete={(score) =>
-          useProgressionStore.getState().completeLevel('level-1', score)
+          useProgressionStore.getState().recordFlight(score)
         }
         onExit={vi.fn()}
       />,
     )
 
-    await screen.findByRole('button', { name: 'Pause Level 1' })
-    fireEvent.keyDown(document, { code: 'KeyL', key: 'l' })
-    fireEvent.keyDown(document, { code: 'KeyL', key: 'l', repeat: true })
+    await screen.findByRole('button', { name: 'Pause flight' })
+    act(runtimeMock.finish)
 
-    expect(runtimeMock.runtime.completeLevel).toHaveBeenCalledTimes(1)
     expect(
-      screen.getByRole('heading', { name: 'Level 1 cleared' }),
+      screen.getByRole('heading', { name: 'Flight complete' }),
     ).toBeInTheDocument()
+    expect(screen.getByText('1,840 points')).toBeInTheDocument()
+    expect(screen.getByText('12.4 km')).toBeInTheDocument()
+    expect(screen.getByText('3m 5s')).toBeInTheDocument()
     expect(useProgressionStore.getState()).toMatchObject({
-      bestScores: { 'level-1': 600 },
-      completedLevelIds: ['level-1'],
-      unlockedLevelIds: ['level-1', 'level-2'],
+      bestScore: 1_840,
+      completedFlights: 1,
     })
-    expect(screen.getByRole('button', { name: 'Fly again' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Exit' })).toBeEnabled()
-
-    fireEvent.blur(window)
-    expect(runtimeMock.runtime.setPaused).not.toHaveBeenCalled()
-    fireEvent.keyUp(document, { code: 'KeyL', key: 'l' })
   })
 
-  it('resets cleanly after a completed run', async () => {
-    render(
-      <LevelOneScreen
-        level={GAME_LEVELS[0]}
-        onComplete={vi.fn()}
-        onExit={vi.fn()}
-      />,
-    )
+  it('starts a fresh unlimited run from the result screen', async () => {
+    render(<LevelOneScreen onComplete={vi.fn()} onExit={vi.fn()} />)
 
-    await screen.findByRole('button', { name: 'Pause Level 1' })
-    fireEvent.keyDown(document, { code: 'KeyL', key: 'l' })
-    fireEvent.keyUp(document, { code: 'KeyL', key: 'l' })
+    await screen.findByRole('button', { name: 'Pause flight' })
+    act(runtimeMock.finish)
     fireEvent.click(screen.getByRole('button', { name: 'Fly again' }))
 
     expect(runtimeMock.runtime.resetGame).toHaveBeenCalledOnce()
     expect(
-      screen.queryByRole('heading', { name: 'Level 1 cleared' }),
+      screen.queryByRole('heading', { name: 'Flight complete' }),
     ).not.toBeInTheDocument()
   })
 
   it('toggles pause with Enter', async () => {
     render(
       <LevelOneScreen
-        level={GAME_LEVELS[0]}
         onComplete={vi.fn()}
         onExit={vi.fn()}
       />,
     )
 
-    await screen.findByRole('button', { name: 'Pause Level 1' })
+    await screen.findByRole('button', { name: 'Pause flight' })
     fireEvent.keyDown(document, { code: 'Enter', key: 'Enter' })
 
     expect(runtimeMock.runtime.togglePaused).toHaveBeenCalledOnce()

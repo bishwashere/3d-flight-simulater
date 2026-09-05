@@ -9,17 +9,12 @@ interface MainMenuProps {
   onHover: () => void
   onPilotLogin: () => void
   onPilotSkip: () => void
+  onStartFlight: () => void
   onSelect: (panel: MenuPanelId) => void
   pilotName?: string
 }
 
 const MENU_ITEMS = [
-  {
-    icon: Play,
-    label: 'Start game',
-    panel: 'levels',
-    primary: true,
-  },
   {
     icon: Gamepad2,
     label: 'Controls',
@@ -38,6 +33,7 @@ export function MainMenu({
   onPilotLogin,
   onPilotSkip,
   onSelect,
+  onStartFlight,
   pilotName,
 }: MainMenuProps) {
   const reduceMotion = useReducedMotion()
@@ -54,11 +50,19 @@ export function MainMenu({
         ease: [0.22, 1, 0.36, 1],
       }}
     >
+      <MenuButton
+        delay={0.2}
+        icon={Play}
+        label="Start unlimited flight"
+        onActivate={onStartFlight}
+        onHover={onHover}
+        primary
+      />
       {MENU_ITEMS.map((item, itemIndex) => (
         <MenuButton
           key={item.panel}
           {...item}
-          delay={0.2 + itemIndex * 0.07}
+          delay={0.27 + itemIndex * 0.07}
           onActivate={() => onSelect(item.panel)}
           onHover={onHover}
         />

@@ -70,7 +70,7 @@ const silenceParam = (param: AudioParam, now: number, duration = 0.04) => {
 }
 
 /**
- * Procedural Level 1 soundscape. It owns every Web Audio node it creates and
+ * Procedural flight soundscape. It owns every Web Audio node it creates and
  * keeps the context lazy so loading the game never triggers autoplay warnings.
  */
 export class ProceduralLevelOneAudio implements LevelOneAudio {

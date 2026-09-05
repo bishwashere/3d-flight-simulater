@@ -11,7 +11,6 @@ import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder.js'
 import { Scene } from '@babylonjs/core/scene.js'
 import { SkyMaterial } from '@babylonjs/materials/sky/skyMaterial.js'
 
-import type { GameLevelDefinition } from '../config/game-levels'
 import type { LevelOneEngine } from './create-level-one-engine'
 import type {
   LevelOneAssets,
@@ -111,7 +110,6 @@ export async function createLevelOneScene(
   engine: LevelOneEngine,
   settings: ResolvedLevelOnePerformance,
   assets: LevelOneAssets,
-  level: GameLevelDefinition,
 ): Promise<LevelOneWorld> {
   const scene = new Scene(engine)
   scene.clearColor = new Color4(0.48, 0.75, 0.91, 1)
@@ -139,11 +137,9 @@ export async function createLevelOneScene(
   glow.intensity = settings.quality === 'low' ? 0.22 : 0.38
 
   return createGeometricWorld(scene, {
-    checkpointPositions: level.checkpointPositions,
     quality: settings.quality,
+    renderDistance: settings.renderDistance,
     shadowGenerator,
-    theme: level.theme,
-    towerGateCheckpointIndex: level.towerGateCheckpointIndex,
     vegetationCount: settings.vegetationCount,
   })
 }

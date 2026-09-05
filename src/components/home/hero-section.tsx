@@ -25,7 +25,7 @@ export function HeroSection() {
         HORIZON
       </h1>
       <p className="mt-[1.8rem] max-w-[38rem] font-body text-[clamp(0.93rem,1.15vw,1.07rem)] leading-[1.65] font-normal text-balance text-flight-100/80 max-[47rem]:max-w-[33rem] [@media(orientation:landscape)_and_(max-height:36rem)]:mt-4 [@media(orientation:landscape)_and_(max-height:36rem)]:text-[0.83rem]">
-        Free flight across the coast.
+        An endless procedural archipelago. Fly anywhere; land when you are ready.
       </p>
     </motion.section>
   )

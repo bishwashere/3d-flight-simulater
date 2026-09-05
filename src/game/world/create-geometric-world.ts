@@ -11,12 +11,15 @@ import type { Scene } from '@babylonjs/core/scene.js'
 import { createCrashEffects } from './create-crash-effects'
 import { createGeometricCoins } from './create-geometric-coins'
 import {
+  createProceduralRegionChunk,
+  type ProceduralRegionChunk,
+} from './create-procedural-region'
+import {
   GEOMETRIC_AIRCRAFT_GROUND_CLEARANCE,
   createGeometricAircraft,
 } from './create-geometric-aircraft'
 import {
   createGeometricBalloons,
-  createGeometricCheckpoints,
   createGeometricClouds,
 } from './create-geometric-course'
 import {
@@ -24,11 +27,18 @@ import {
   type GeometricWorldMaterials,
 } from './geometric-world-materials'
 import type {
+  GeometricLandingZone,
   GeometricObstacleCollider,
   GeometricObstacleKind,
   GeometricWorld,
   GeometricWorldOptions,
 } from './geometric-world-types'
+import {
+  PROCEDURAL_REGION_SIZE,
+  getProceduralRegionCoordinates,
+  getProceduralRegionSpec,
+  getProceduralTerrainHeight,
+} from './procedural-regions'
 
 const LAND_HEIGHT = 2
 const WATER_HEIGHT = -12
@@ -205,7 +215,10 @@ function createTerrainHeightQuery(): (x: number, z: number) => number {
       return LAND_HEIGHT + 0.18
     }
     if (!isInsideIsland(x, z) && !isletHeight) {
-      return WATER_HEIGHT
+      const region = getProceduralRegionCoordinates(x, z)
+      return region.x === 0 && region.z === 0
+        ? WATER_HEIGHT
+        : getProceduralTerrainHeight(x, z)
     }
 
     let height = LAND_HEIGHT
@@ -216,14 +229,14 @@ function createTerrainHeightQuery(): (x: number, z: number) => number {
   }
 }
 
-function createBaseTerrain(context: WorldBuildContext): void {
+function createBaseTerrain(context: WorldBuildContext): Mesh {
   const ocean = createBox(
     context,
     'world-ocean',
-    { depth: 4_200, height: 2, width: 4_800 },
+    { depth: 8_000, height: 2, width: 8_000 },
     new Vector3(0, WATER_HEIGHT - 1, 0),
     context.materials.water,
-    { castsShadow: false, receivesShadow: false },
+    { animated: true, castsShadow: false, receivesShadow: false },
   )
   ocean.alwaysSelectAsActiveMesh = true
 
@@ -341,6 +354,8 @@ function createBaseTerrain(context: WorldBuildContext): void {
       Math.min(hill.radius * 0.43, hill.height * 0.6),
     )
   }
+
+  return ocean
 }
 
 function createRunwayMarkings(context: WorldBuildContext): void {
@@ -840,7 +855,7 @@ export function createGeometricWorld(
 ): GeometricWorld {
   const quality = options.quality ?? 'high'
   const root = new TransformNode('geometric-world-root', scene)
-  const materials = createGeometricWorldMaterials(scene, options.theme ?? 'cyan')
+  const materials = createGeometricWorldMaterials(scene)
   const obstacles: GeometricObstacleCollider[] = []
   const context: WorldBuildContext = {
     materials,
@@ -851,7 +866,7 @@ export function createGeometricWorld(
   }
   const terrainHeightAt = createTerrainHeightQuery()
 
-  createBaseTerrain(context)
+  const ocean = createBaseTerrain(context)
   const windsock = createAirport(context)
   createCity(context)
   createLagoonBridge(context)
@@ -861,11 +876,8 @@ export function createGeometricWorld(
     options.vegetationCount ?? (quality === 'high' ? 90 : quality === 'medium' ? 62 : 36),
   )
   const balloons = createGeometricBalloons(context)
-  const checkpoints = createGeometricCheckpoints(context, {
-    checkpointPositions: options.checkpointPositions,
-    towerGateCheckpointIndex: options.towerGateCheckpointIndex,
-  })
-  const coins = createGeometricCoins(context)
+  const homeCoins = createGeometricCoins(context)
+  const coins = [...homeCoins]
   const cloudLayer = createGeometricClouds(context, quality)
   const aircraft = createGeometricAircraft(scene, materials, options.shadowGenerator)
   aircraft.root.parent = root
@@ -880,28 +892,103 @@ export function createGeometricWorld(
   aircraft.root.position.copyFrom(spawnPosition)
   aircraft.root.rotationQuaternion = spawnRotation.clone()
 
+  const homeLandingZone: GeometricLandingZone = {
+    center: new Vector3(RUNWAY_X, runwayElevation, RUNWAY_CENTER_Z),
+    elevation: runwayElevation,
+    headingRadians: 0,
+    halfLength: RUNWAY_LENGTH / 2 - 35,
+    halfWidth: RUNWAY_WIDTH / 2 - 8,
+    id: 'home-island-runway',
+  }
+  const landingZones: GeometricLandingZone[] = [homeLandingZone]
+  const collectedCoinIds = new Set<string>()
+  const proceduralChunks = new Map<string, ProceduralRegionChunk>()
+  const streamingRadius = Math.min(
+    2,
+    Math.max(
+      1,
+      Math.round((options.renderDistance ?? 1_700) / PROCEDURAL_REGION_SIZE),
+    ),
+  )
+
+  const removeItems = <Item,>(target: Item[], items: readonly Item[]): void => {
+    for (const item of items) {
+      const index = target.indexOf(item)
+      if (index >= 0) {
+        target.splice(index, 1)
+      }
+    }
+  }
+
+  const syncProceduralRegions = (position: Readonly<Vector3>): void => {
+    const center = getProceduralRegionCoordinates(position.x, position.z)
+    const desiredKeys = new Set<string>()
+
+    for (
+      let regionX = center.x - streamingRadius;
+      regionX <= center.x + streamingRadius;
+      regionX += 1
+    ) {
+      for (
+        let regionZ = center.z - streamingRadius;
+        regionZ <= center.z + streamingRadius;
+        regionZ += 1
+      ) {
+        if (regionX === 0 && regionZ === 0) {
+          continue
+        }
+        const key = `${regionX}:${regionZ}`
+        desiredKeys.add(key)
+        if (proceduralChunks.has(key)) {
+          continue
+        }
+
+        const chunk = createProceduralRegionChunk(
+          {
+            collectedCoinIds,
+            materials,
+            quality,
+            scene,
+            shadowGenerator: options.shadowGenerator,
+          },
+          getProceduralRegionSpec(regionX, regionZ),
+        )
+        proceduralChunks.set(key, chunk)
+        coins.push(...chunk.coins)
+        landingZones.push(chunk.landingZone)
+        obstacles.push(...chunk.obstacles)
+      }
+    }
+
+    for (const [key, chunk] of proceduralChunks) {
+      if (desiredKeys.has(key)) {
+        continue
+      }
+      removeItems(coins, chunk.coins)
+      removeItems(landingZones, [chunk.landingZone])
+      removeItems(obstacles, chunk.obstacles)
+      chunk.dispose()
+      proceduralChunks.delete(key)
+    }
+  }
+
+  syncProceduralRegions(spawnPosition)
   const crashEffects = createCrashEffects(scene, root, quality)
   let disposed = false
+  let cloudDrift = 0
 
   return {
     aircraft,
     bounds: {
       maximumAltitude: 720,
-      maximumX: 1_650,
-      maximumZ: 1_350,
+      maximumX: Number.MAX_SAFE_INTEGER,
+      maximumZ: Number.MAX_SAFE_INTEGER,
       minimumAltitude: WATER_HEIGHT,
-      minimumX: -1_650,
-      minimumZ: -1_350,
+      minimumX: Number.MIN_SAFE_INTEGER,
+      minimumZ: Number.MIN_SAFE_INTEGER,
     },
-    checkpoints,
     coins,
-    landingZone: {
-      center: new Vector3(RUNWAY_X, runwayElevation, RUNWAY_CENTER_Z),
-      elevation: runwayElevation,
-      headingRadians: 0,
-      halfLength: RUNWAY_LENGTH / 2 - 35,
-      halfWidth: RUNWAY_WIDTH / 2 - 8,
-    },
+    landingZones,
     obstacles,
     scene,
     spawnPosition,
@@ -910,18 +997,30 @@ export function createGeometricWorld(
       crashEffects.clear()
       aircraft.setCrashState(false)
     },
+    collectCoin(coin): boolean {
+      if (!coin.collect()) {
+        return false
+      }
+      collectedCoinIds.add(coin.id)
+      return true
+    },
     dispose(): void {
       if (disposed) {
         return
       }
       disposed = true
       crashEffects.dispose()
+      for (const chunk of proceduralChunks.values()) {
+        chunk.dispose()
+      }
+      proceduralChunks.clear()
       root.dispose(false)
       for (const material of Object.values(materials)) {
         material.dispose()
       }
     },
     resetCoins(): void {
+      collectedCoinIds.clear()
       for (const coin of coins) {
         coin.reset()
       }
@@ -931,13 +1030,13 @@ export function createGeometricWorld(
       crashEffects.show(position, velocity)
     },
     terrainHeightAt,
-    update(elapsedSeconds, deltaSeconds): void {
+    update(elapsedSeconds, deltaSeconds, playerPosition): void {
       const delta = Math.min(Math.max(deltaSeconds, 0), 0.1)
-      for (const checkpoint of checkpoints) {
-        checkpoint.update(elapsedSeconds)
-      }
-      for (const coin of coins) {
+      for (const coin of homeCoins) {
         coin.update(elapsedSeconds)
+      }
+      for (const chunk of proceduralChunks.values()) {
+        chunk.update(elapsedSeconds)
       }
       for (const balloon of balloons) {
         balloon.root.position.y =
@@ -950,9 +1049,16 @@ export function createGeometricWorld(
       }
       windsock.rotation.y = 0.38 + Math.sin(elapsedSeconds * 0.55) * 0.08
       windsock.rotation.z = Math.sin(elapsedSeconds * 1.7) * 0.035
-      cloudLayer.position.x += delta * 4.5
-      if (cloudLayer.position.x > 1_100) {
-        cloudLayer.position.x = -1_100
+      cloudDrift += delta * 4.5
+      if (cloudDrift > 1_100) {
+        cloudDrift = -1_100
+      }
+      if (playerPosition) {
+        syncProceduralRegions(playerPosition)
+        ocean.position.x = playerPosition.x
+        ocean.position.z = playerPosition.z
+        cloudLayer.position.x = playerPosition.x + cloudDrift
+        cloudLayer.position.z = playerPosition.z
       }
       crashEffects.update(delta)
     },
@@ -962,8 +1068,6 @@ export function createGeometricWorld(
 export type {
   GeometricAircraftAnimationState,
   GeometricAircraftVisual,
-  GeometricCheckpoint,
-  GeometricCheckpointState,
   GeometricCoin,
   GeometricLandingZone,
   GeometricObstacleCollider,

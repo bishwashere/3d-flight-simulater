@@ -6,97 +6,104 @@ export interface CourseVector {
   z: number
 }
 
-export interface LevelOneCourseCheckpoint {
-  position: CourseVector
-  radius: number
-}
-
 export interface LevelOneCourseFrame {
   airborne: boolean
   deltaSeconds: number
   insideLandingZone: boolean
   onGround: boolean
   position: CourseVector
+  regionId: string
   speed: number
   verticalSpeed: number
 }
 
 export type LevelOneCourseEvent =
-  | { score: number; type: 'checkpoint' }
   | { coinId: string; points: number; score: number; type: 'coin' }
+  | { regionId: string; score: number; type: 'region' }
   | { score: number; type: 'complete' }
 
 export interface LevelOneCourseSnapshot {
   airborneSeconds: number
   airtimeScore: number
-  checkpointCount: number
-  checkpointDistance: number
-  checkpointIndex: number
   coinScore: number
   coinsCollected: number
+  distanceScore: number
+  distanceTravelled: number
+  explorationScore: number
   objective: string
   phase: LevelOneGamePhase
+  regionsExplored: number
   score: number
 }
 
 const AIRTIME_SCORE_INTERVAL_SECONDS = 3
 const AIRTIME_SCORE_ROUNDING_TOLERANCE_SECONDS = 1e-9
-const CHECKPOINT_SCORE = 150
+const DISTANCE_SCORE_INTERVAL_METERS = 100
+const DISTANCE_SCORE_PER_INTERVAL = 10
+const REGION_SCORE = 100
 const COIN_SCORE = 25
-const LANDING_SCORE = 600
+const LANDING_SCORE = 500
+const STOP_SPEED_METERS_PER_SECOND = 3.5
 
-function distance(left: CourseVector, right: CourseVector): number {
-  return Math.hypot(
-    left.x - right.x,
-    left.y - right.y,
-    left.z - right.z,
-  )
+function horizontalDistance(left: CourseVector, right: CourseVector): number {
+  return Math.hypot(left.x - right.x, left.z - right.z)
 }
 
+function isFiniteVector(vector: CourseVector): boolean {
+  return [vector.x, vector.y, vector.z].every(Number.isFinite)
+}
+
+/**
+ * Scorekeeper for one open-ended flight. There is no route to clear: time,
+ * distance, discoveries and coins accumulate until the pilot lands on any
+ * runway and brakes to a stop.
+ */
 export class LevelOneCourse {
   private airborneSeconds = 0
   private airtimeScore = 0
-  private checkpointIndex = 0
-  private readonly checkpoints: readonly LevelOneCourseCheckpoint[]
   private coinScore = 0
   private readonly collectedCoinIds = new Set<string>()
+  private distanceScore = 0
+  private distanceTravelled = 0
+  private explorationScore = 0
+  private readonly exploredRegionIds = new Set<string>()
+  private hasBeenAirborne = false
+  private landingVerticalSpeed: number | null = null
+  private lastPosition: CourseVector | null = null
+  private objective = 'TAKE OFF · EXPLORE ANY DIRECTION'
   private phase: LevelOneGamePhase = 'ready'
+  private previouslyOnGround = true
   private score = 0
-
-  constructor(checkpoints: readonly LevelOneCourseCheckpoint[]) {
-    this.checkpoints = checkpoints
-  }
 
   start(): void {
     if (this.phase === 'ready') {
       this.phase = 'playing'
+      this.objective = 'TAKE OFF · EXPLORE ANY DIRECTION'
     }
   }
 
   crash(): void {
     if (this.phase !== 'complete') {
       this.phase = 'crashed'
+      this.objective = 'RESTART  [R]'
     }
-  }
-
-  forceComplete(): LevelOneCourseEvent | undefined {
-    if (this.phase === 'complete') {
-      return undefined
-    }
-
-    const remainingCheckpoints = this.checkpoints.length - this.checkpointIndex
-    this.score += remainingCheckpoints * CHECKPOINT_SCORE
-    this.checkpointIndex = this.checkpoints.length
-    return this.finish(0)
   }
 
   reset(): void {
     this.airborneSeconds = 0
     this.airtimeScore = 0
-    this.checkpointIndex = 0
     this.coinScore = 0
     this.collectedCoinIds.clear()
+    this.distanceScore = 0
+    this.distanceTravelled = 0
+    this.explorationScore = 0
+    this.exploredRegionIds.clear()
+    this.hasBeenAirborne = false
+    this.landingVerticalSpeed = null
+    this.lastPosition = null
+    this.objective = 'TAKE OFF · EXPLORE ANY DIRECTION'
     this.phase = 'ready'
+    this.previouslyOnGround = true
     this.score = 0
   }
 
@@ -136,12 +143,14 @@ export class LevelOneCourse {
       return undefined
     }
 
-    if (
-      frame.airborne &&
-      Number.isFinite(frame.deltaSeconds) &&
-      frame.deltaSeconds > 0
-    ) {
-      this.airborneSeconds += frame.deltaSeconds
+    const deltaSeconds =
+      Number.isFinite(frame.deltaSeconds) && frame.deltaSeconds > 0
+        ? frame.deltaSeconds
+        : 0
+
+    if (frame.airborne) {
+      this.hasBeenAirborne = true
+      this.airborneSeconds += deltaSeconds
       const earnedAirtimeScore = Math.floor(
         (this.airborneSeconds + AIRTIME_SCORE_ROUNDING_TOLERANCE_SECONDS) /
           AIRTIME_SCORE_INTERVAL_SECONDS,
@@ -153,63 +162,87 @@ export class LevelOneCourse {
       }
     }
 
-    const checkpoint = this.checkpoints[this.checkpointIndex]
-    if (checkpoint && distance(frame.position, checkpoint.position) <= checkpoint.radius) {
-      this.checkpointIndex += 1
-      this.score += CHECKPOINT_SCORE
-      return { score: this.score, type: 'checkpoint' }
+    if (isFiniteVector(frame.position)) {
+      if (this.lastPosition && frame.airborne) {
+        const travelled = horizontalDistance(frame.position, this.lastPosition)
+        if (Number.isFinite(travelled) && travelled < 500) {
+          this.distanceTravelled += travelled
+          const earnedDistanceScore =
+            Math.floor(
+              this.distanceTravelled / DISTANCE_SCORE_INTERVAL_METERS,
+            ) * DISTANCE_SCORE_PER_INTERVAL
+          const newPoints = earnedDistanceScore - this.distanceScore
+          if (newPoints > 0) {
+            this.distanceScore = earnedDistanceScore
+            this.score += newPoints
+          }
+        }
+      }
+      this.lastPosition = { ...frame.position }
+    }
+
+    let regionEvent: LevelOneCourseEvent | undefined
+    const regionId = frame.regionId.trim()
+    if (regionId && !this.exploredRegionIds.has(regionId)) {
+      const firstRegion = this.exploredRegionIds.size === 0
+      this.exploredRegionIds.add(regionId)
+      if (!firstRegion) {
+        this.explorationScore += REGION_SCORE
+        this.score += REGION_SCORE
+        regionEvent = { regionId, score: this.score, type: 'region' }
+      }
     }
 
     if (
-      this.checkpointIndex === this.checkpoints.length &&
+      !this.previouslyOnGround &&
+      frame.onGround &&
+      frame.insideLandingZone
+    ) {
+      this.landingVerticalSpeed = Math.abs(frame.verticalSpeed)
+    }
+    if (!frame.onGround) {
+      this.landingVerticalSpeed = null
+    }
+    this.previouslyOnGround = frame.onGround
+
+    if (
+      this.hasBeenAirborne &&
       frame.insideLandingZone &&
       frame.onGround &&
-      frame.speed <= 20 &&
-      Math.abs(frame.verticalSpeed) <= 3.5
+      frame.speed <= STOP_SPEED_METERS_PER_SECOND
     ) {
+      const touchdownSpeed = this.landingVerticalSpeed ?? Math.abs(frame.verticalSpeed)
       const smoothLandingBonus = Math.max(
         0,
-        Math.round((3.5 - Math.abs(frame.verticalSpeed)) * 40),
+        Math.round((3.5 - Math.min(3.5, touchdownSpeed)) * 40),
       )
-      return this.finish(smoothLandingBonus)
+      this.score += LANDING_SCORE + smoothLandingBonus
+      this.phase = 'complete'
+      this.objective = 'FLIGHT SCORE BANKED'
+      return { score: this.score, type: 'complete' }
     }
 
-    return undefined
+    this.objective = !this.hasBeenAirborne
+      ? 'TAKE OFF · EXPLORE ANY DIRECTION'
+      : frame.insideLandingZone && frame.onGround
+        ? 'HOLD B TO STOP AND BANK SCORE'
+        : 'EXPLORE FREELY · LAND AT ANY RUNWAY'
+
+    return regionEvent
   }
 
-  private finish(smoothLandingBonus: number): LevelOneCourseEvent {
-    this.score += LANDING_SCORE + smoothLandingBonus
-    this.phase = 'complete'
-    return { score: this.score, type: 'complete' }
-  }
-
-  getSnapshot(position: CourseVector): LevelOneCourseSnapshot {
-    const checkpoint = this.checkpoints[this.checkpointIndex]
-    const checkpointDistance = this.phase === 'playing' && checkpoint
-      ? distance(position, checkpoint.position)
-      : 0
-
-    let objective = 'READY'
-    if (this.phase === 'playing') {
-      objective = checkpoint
-        ? `CHECKPOINT ${this.checkpointIndex + 1}`
-        : 'LAND ON THE RUNWAY'
-    } else if (this.phase === 'crashed') {
-      objective = 'RESTART  [R]'
-    } else if (this.phase === 'complete') {
-      objective = 'COURSE COMPLETE'
-    }
-
+  getSnapshot(): LevelOneCourseSnapshot {
     return {
       airborneSeconds: this.airborneSeconds,
       airtimeScore: this.airtimeScore,
-      checkpointCount: this.checkpoints.length,
-      checkpointDistance,
-      checkpointIndex: this.checkpointIndex,
       coinScore: this.coinScore,
       coinsCollected: this.collectedCoinIds.size,
-      objective,
+      distanceScore: this.distanceScore,
+      distanceTravelled: this.distanceTravelled,
+      explorationScore: this.explorationScore,
+      objective: this.objective,
       phase: this.phase,
+      regionsExplored: this.exploredRegionIds.size,
       score: this.score,
     }
   }

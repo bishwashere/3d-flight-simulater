@@ -3,14 +3,7 @@ import type { TransformNode } from '@babylonjs/core/Meshes/transformNode.js'
 import type { Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 
-import type {
-  GameLevelCheckpointPosition,
-  GameLevelTheme,
-} from '../../config/game-levels'
-
 export type GeometricWorldQuality = 'low' | 'medium' | 'high'
-
-export type GeometricCheckpointState = 'active' | 'collected' | 'pending'
 
 export type GeometricObstacleKind =
   | 'balloon'
@@ -21,12 +14,9 @@ export type GeometricObstacleKind =
   | 'tower'
 
 export interface GeometricWorldOptions {
-  checkpointPositions?: readonly GameLevelCheckpointPosition[]
   quality?: GeometricWorldQuality
+  renderDistance?: number
   shadowGenerator?: ShadowGenerator
-  theme?: GameLevelTheme
-  /** Zero-based checkpoint index surrounded by the optional tower gate. */
-  towerGateCheckpointIndex?: number
   vegetationCount?: number
 }
 
@@ -49,16 +39,6 @@ export interface GeometricAircraftVisual {
     state: GeometricAircraftAnimationState,
     deltaSeconds: number,
   ) => void
-}
-
-export interface GeometricCheckpoint {
-  readonly index: number
-  readonly position: Vector3
-  readonly radius: number
-  readonly root: TransformNode
-  readonly state: GeometricCheckpointState
-  setState: (state: GeometricCheckpointState) => void
-  update: (elapsedSeconds: number) => void
 }
 
 export interface GeometricCoin {
@@ -89,6 +69,7 @@ export interface GeometricLandingZone {
   readonly headingRadians: number
   readonly halfLength: number
   readonly halfWidth: number
+  readonly id: string
 }
 
 export interface GeometricWorldBounds {
@@ -103,17 +84,21 @@ export interface GeometricWorldBounds {
 export interface GeometricWorld {
   readonly aircraft: GeometricAircraftVisual
   readonly bounds: GeometricWorldBounds
-  readonly checkpoints: readonly GeometricCheckpoint[]
   readonly coins: readonly GeometricCoin[]
-  readonly landingZone: GeometricLandingZone
+  readonly landingZones: readonly GeometricLandingZone[]
   readonly obstacles: readonly GeometricObstacleCollider[]
   readonly scene: Scene
   readonly spawnPosition: Vector3
   readonly spawnRotation: Quaternion
   clearCrashEffects: () => void
+  collectCoin: (coin: GeometricCoin) => boolean
   dispose: () => void
   resetCoins: () => void
   showCrashEffects: (position: Vector3, velocity?: Vector3) => void
   terrainHeightAt: (x: number, z: number) => number
-  update: (elapsedSeconds: number, deltaSeconds: number) => void
+  update: (
+    elapsedSeconds: number,
+    deltaSeconds: number,
+    playerPosition?: Readonly<Vector3>,
+  ) => void
 }

@@ -1,5 +1,5 @@
-'use client'
+import { redirect } from 'next/navigation'
 
 export default function PlayPage() {
-  return null
+  redirect('/game')
 }

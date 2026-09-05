@@ -1,12 +1,7 @@
-import { useParams, useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useCallback, useMemo, useState } from 'react'
 
-import {
-  GAME_LEVELS,
-  getGameLevel,
-  getLevelPath,
-} from '../../config/game-levels'
-import { PANEL_PATHS } from '../../config/menu-routes'
+import { HOME_PATH } from '../../config/menu-routes'
 import type { LevelOneQuality } from '../../game/level-one-types'
 import {
   isPilotStorageUnconfigured,
@@ -35,29 +30,17 @@ function resolveGeometryQuality(
   return preset === 'custom' ? 'high' : preset
 }
 
-export function LevelRoute() {
+export function FlightRoute() {
   const router = useRouter()
-  const { levelId } = useParams<{ levelId: string }>()
-  const level = getGameLevel(levelId)
-  const levelIndex = level
-    ? GAME_LEVELS.findIndex((candidate) => candidate.id === level.id)
-    : -1
-  const nextLevel = levelIndex >= 0 ? GAME_LEVELS[levelIndex + 1] : undefined
   const pilotHasHydrated = usePilotProfileStore((state) => state.hasHydrated)
   const pilotHasLoadedRemote = usePilotProfileStore(
     (state) => state.hasLoadedRemote,
   )
   const pilotRecord = usePilotProfileStore((state) => state.record)
   const setPilotRecord = usePilotProfileStore((state) => state.setRecord)
+  const recordFlight = useProgressionStore((state) => state.recordFlight)
   const [pendingPilotScore, setPendingPilotScore] = useState<number | null>(null)
   const [profileSaving, setProfileSaving] = useState(false)
-  const isUnlocked = useProgressionStore((state) =>
-    level ? state.isUnlocked(level.id) : false,
-  )
-  const nextLevelUnlocked = useProgressionStore((state) =>
-    nextLevel ? state.isUnlocked(nextLevel.id) : false,
-  )
-  const completeLevel = useProgressionStore((state) => state.completeLevel)
   const adaptiveResolutionEnabled = useSettingsStore(
     (state) => state.adaptiveResolutionEnabled,
   )
@@ -102,17 +85,6 @@ export function LevelRoute() {
   const waitingForPilotProfile =
     !pilotHasHydrated || (Boolean(pilotRecord) && !pilotHasLoadedRemote)
 
-  useEffect(() => {
-    if (!level || (!waitingForPilotProfile && !isUnlocked)) {
-      router.replace(PANEL_PATHS.levels)
-    }
-  }, [
-    isUnlocked,
-    level,
-    router,
-    waitingForPilotProfile,
-  ])
-
   const applySavedPilotRecord = useCallback(
     (record: PilotRecord) => {
       applyPilotProgress(record)
@@ -125,8 +97,8 @@ export function LevelRoute() {
     async (identity: PilotIdentity) => {
       setProfileSaving(true)
 
-      if (level && pendingPilotScore !== null) {
-        completeLevel(level.id, pendingPilotScore)
+      if (pendingPilotScore !== null) {
+        recordFlight(pendingPilotScore)
       }
 
       const localRecord = createPilotRecord(
@@ -148,56 +120,38 @@ export function LevelRoute() {
     },
     [
       applySavedPilotRecord,
-      completeLevel,
-      level,
       pendingPilotScore,
+      recordFlight,
       setPilotRecord,
     ],
   )
 
   const handleComplete = useCallback(
     (score: number) => {
-      if (level) {
-        const currentPilot = usePilotProfileStore.getState().record
+      const currentPilot = usePilotProfileStore.getState().record
 
-        if (!currentPilot) {
-          setPendingPilotScore(score)
-          return
-        }
-
-        completeLevel(level.id, score)
-        if (currentPilot) {
-          const snapshot = createCurrentPilotRecord(currentPilot)
-          usePilotProfileStore.getState().setRecord(snapshot)
-          void savePilotRecord(snapshot)
-            .then(applySavedPilotRecord)
-            .catch((error: unknown) => {
-              if (!isPilotStorageUnconfigured(error)) {
-                console.warn(
-                  '[Coastal Flight] Score cloud sync unavailable',
-                  error,
-                )
-              }
-            })
-        }
+      if (!currentPilot) {
+        setPendingPilotScore(score)
+        return
       }
+
+      recordFlight(score)
+      const snapshot = createCurrentPilotRecord(currentPilot)
+      usePilotProfileStore.getState().setRecord(snapshot)
+      void savePilotRecord(snapshot)
+        .then(applySavedPilotRecord)
+        .catch((error: unknown) => {
+          if (!isPilotStorageUnconfigured(error)) {
+            console.warn('[Coastal Flight] Score cloud sync unavailable', error)
+          }
+        })
     },
-    [applySavedPilotRecord, completeLevel, level],
+    [applySavedPilotRecord, recordFlight],
   )
 
   const handleSkipPilotSave = useCallback(() => {
     setPendingPilotScore(null)
   }, [])
-
-  if (!level) {
-    return (
-      <main className="fixed inset-0 grid place-items-center bg-flight-950 text-flight-100">
-        <span className="text-xs font-bold tracking-[0.2em] text-hud">
-          RETURNING TO LEVEL SELECT
-        </span>
-      </main>
-    )
-  }
 
   if (waitingForPilotProfile) {
     return (
@@ -209,39 +163,21 @@ export function LevelRoute() {
     )
   }
 
-  if (!isUnlocked) {
-    return (
-      <main className="fixed inset-0 grid place-items-center bg-flight-950 text-flight-100">
-        <span className="text-xs font-bold tracking-[0.2em] text-hud">
-          RETURNING TO LEVEL SELECT
-        </span>
-      </main>
-    )
-  }
-
   return (
     <>
       <LevelOneScreen
-        key={level.id}
         gameplaySoundsEnabled={gameplaySoundsEnabled}
-        level={level}
         masterVolume={masterVolume}
         musicEnabled={musicEnabled}
         onComplete={handleComplete}
-        onExit={() => router.push(PANEL_PATHS.levels)}
+        onExit={() => router.push(HOME_PATH)}
         onGameplaySoundsEnabledChange={setGameplaySoundsEnabled}
         onMusicEnabledChange={setMusicEnabled}
-        onNextLevel={
-          nextLevel && nextLevelUnlocked
-            ? () => router.push(getLevelPath(nextLevel.id))
-            : undefined
-        }
         performance={performanceSettings}
         pointerYoke={pointerYokeEnabled}
       />
       {pendingPilotScore !== null ? (
         <PilotProfileGate
-          level={level}
           mode="postflight"
           onSkip={handleSkipPilotSave}
           onSubmit={handlePilotSubmit}
@@ -252,3 +188,6 @@ export function LevelRoute() {
     </>
   )
 }
+
+// Kept as a source-compatible export for existing imports while the URL is /game.
+export { FlightRoute as LevelRoute }
