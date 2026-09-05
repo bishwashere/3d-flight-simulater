@@ -85,16 +85,75 @@ describe('level route', () => {
     },
   )
 
-  it('asks for a pilot profile before starting when local identity is absent', () => {
+  it('starts the level without asking for a pilot profile first', () => {
     usePilotProfileStore.setState({ record: null })
     renderLevel('/game/level-1')
 
+    expect(screen.getByText(/Playing Level 1: First Flight/i)).toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { name: 'Identify pilot' }),
-    ).toBeInTheDocument()
+      screen.queryByRole('heading', { name: 'Identify pilot' }),
+    ).not.toBeInTheDocument()
     expect(
-      screen.getByRole('form', { name: 'Pilot profile' }),
+      screen.queryByRole('form', { name: 'Pilot profile' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('lets an unidentified pilot skip saving a completed run', () => {
+    usePilotProfileStore.setState({ record: null })
+    renderLevel('/game/level-1')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Complete run' }))
+
+    expect(
+      screen.getByRole('heading', { name: 'Save this run?' }),
     ).toBeInTheDocument()
+    expect(screen.getByText('Score 900')).toBeInTheDocument()
+    expect(useProgressionStore.getState()).toMatchObject({
+      bestScores: { 'level-1': 0 },
+      completedLevelIds: [],
+      unlockedLevelIds: ['level-1'],
+    })
+    expect(savePilotRecord).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Skip saving' }))
+
+    expect(
+      screen.queryByRole('heading', { name: 'Save this run?' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Next level' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('saves an unidentified pilot after completion when requested', async () => {
+    usePilotProfileStore.setState({ record: null })
+    renderLevel('/game/level-1')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Complete run' }))
+    fireEvent.change(screen.getByLabelText('Username'), {
+      target: { value: 'New Pilot' },
+    })
+    fireEvent.change(screen.getByLabelText('Email'), {
+      target: { value: 'new@example.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save progress' }))
+
+    await waitFor(() => {
+      expect(savePilotRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: 'new@example.com',
+          levels: [{ id: 1, passed: true, score: 900 }],
+          username: 'New Pilot',
+        }),
+      )
+    })
+
+    expect(useProgressionStore.getState()).toMatchObject({
+      bestScores: { 'level-1': 900 },
+      completedLevelIds: ['level-1'],
+      unlockedLevelIds: ['level-1', 'level-2'],
+    })
+    expect(screen.getByRole('button', { name: 'Next level' })).toBeInTheDocument()
   })
 
   it('records completion, syncs the score, and continues to the next level', async () => {

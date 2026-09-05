@@ -10,6 +10,8 @@ import type { IconComponent } from '../../types/icon'
 
 interface PilotProfileFormProps {
   onSubmit: (identity: PilotIdentity) => void
+  submitLabel?: string
+  submittingLabel?: string
   submitting?: boolean
 }
 
@@ -51,6 +53,8 @@ const EMPTY_VALUES: PilotIdentity = {
 
 export function PilotProfileForm({
   onSubmit,
+  submitLabel = 'Save and fly',
+  submittingLabel = 'Syncing pilot',
   submitting = false,
 }: PilotProfileFormProps) {
   const formId = useId()
@@ -157,7 +161,7 @@ export function PilotProfileForm({
         disabled={submitting}
         type="submit"
       >
-        {submitting ? 'Syncing pilot' : 'Save and fly'}{' '}
+        {submitting ? submittingLabel : submitLabel}{' '}
         <LogIn aria-hidden={true} size={17} />
       </Button>
     </form>

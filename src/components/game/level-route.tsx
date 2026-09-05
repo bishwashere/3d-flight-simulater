@@ -39,15 +39,23 @@ export function LevelRoute() {
   const router = useRouter()
   const { levelId } = useParams<{ levelId: string }>()
   const level = getGameLevel(levelId)
+  const levelIndex = level
+    ? GAME_LEVELS.findIndex((candidate) => candidate.id === level.id)
+    : -1
+  const nextLevel = levelIndex >= 0 ? GAME_LEVELS[levelIndex + 1] : undefined
   const pilotHasHydrated = usePilotProfileStore((state) => state.hasHydrated)
   const pilotHasLoadedRemote = usePilotProfileStore(
     (state) => state.hasLoadedRemote,
   )
   const pilotRecord = usePilotProfileStore((state) => state.record)
   const setPilotRecord = usePilotProfileStore((state) => state.setRecord)
+  const [pendingPilotScore, setPendingPilotScore] = useState<number | null>(null)
   const [profileSaving, setProfileSaving] = useState(false)
   const isUnlocked = useProgressionStore((state) =>
     level ? state.isUnlocked(level.id) : false,
+  )
+  const nextLevelUnlocked = useProgressionStore((state) =>
+    nextLevel ? state.isUnlocked(nextLevel.id) : false,
   )
   const completeLevel = useProgressionStore((state) => state.completeLevel)
   const adaptiveResolutionEnabled = useSettingsStore(
@@ -91,25 +99,18 @@ export function LevelRoute() {
     ],
   )
 
+  const waitingForPilotProfile =
+    !pilotHasHydrated || (Boolean(pilotRecord) && !pilotHasLoadedRemote)
+
   useEffect(() => {
-    if (
-      !level ||
-      (pilotHasHydrated &&
-        pilotHasLoadedRemote &&
-        pilotRecord &&
-        !profileSaving &&
-        !isUnlocked)
-    ) {
+    if (!level || (!waitingForPilotProfile && !isUnlocked)) {
       router.replace(PANEL_PATHS.levels)
     }
   }, [
     isUnlocked,
     level,
-    pilotHasHydrated,
-    pilotHasLoadedRemote,
-    pilotRecord,
-    profileSaving,
     router,
+    waitingForPilotProfile,
   ])
 
   const applySavedPilotRecord = useCallback(
@@ -122,12 +123,17 @@ export function LevelRoute() {
 
   const handlePilotSubmit = useCallback(
     async (identity: PilotIdentity) => {
+      setProfileSaving(true)
+
+      if (level && pendingPilotScore !== null) {
+        completeLevel(level.id, pendingPilotScore)
+      }
+
       const localRecord = createPilotRecord(
         identity,
         useProgressionStore.getState(),
       )
       setPilotRecord(localRecord)
-      setProfileSaving(true)
 
       try {
         applySavedPilotRecord(await savePilotRecord(localRecord))
@@ -136,18 +142,30 @@ export function LevelRoute() {
           console.warn('[Coastal Flight] Pilot saved locally only', error)
         }
       } finally {
+        setPendingPilotScore(null)
         setProfileSaving(false)
       }
     },
-    [applySavedPilotRecord, setPilotRecord],
+    [
+      applySavedPilotRecord,
+      completeLevel,
+      level,
+      pendingPilotScore,
+      setPilotRecord,
+    ],
   )
 
   const handleComplete = useCallback(
     (score: number) => {
       if (level) {
-        completeLevel(level.id, score)
         const currentPilot = usePilotProfileStore.getState().record
 
+        if (!currentPilot) {
+          setPendingPilotScore(score)
+          return
+        }
+
+        completeLevel(level.id, score)
         if (currentPilot) {
           const snapshot = createCurrentPilotRecord(currentPilot)
           usePilotProfileStore.getState().setRecord(snapshot)
@@ -167,6 +185,10 @@ export function LevelRoute() {
     [applySavedPilotRecord, completeLevel, level],
   )
 
+  const handleSkipPilotSave = useCallback(() => {
+    setPendingPilotScore(null)
+  }, [])
+
   if (!level) {
     return (
       <main className="fixed inset-0 grid place-items-center bg-flight-950 text-flight-100">
@@ -177,23 +199,13 @@ export function LevelRoute() {
     )
   }
 
-  if (!pilotHasHydrated || !pilotHasLoadedRemote) {
+  if (waitingForPilotProfile) {
     return (
       <main className="fixed inset-0 grid place-items-center bg-flight-950 text-flight-100">
         <span className="text-xs font-bold tracking-[0.2em] text-hud">
           LOADING PILOT PROFILE
         </span>
       </main>
-    )
-  }
-
-  if (!pilotRecord || profileSaving) {
-    return (
-      <PilotProfileGate
-        level={level}
-        onSubmit={handlePilotSubmit}
-        submitting={profileSaving}
-      />
     )
   }
 
@@ -207,27 +219,36 @@ export function LevelRoute() {
     )
   }
 
-  const levelIndex = GAME_LEVELS.findIndex((candidate) => candidate.id === level.id)
-  const nextLevel = GAME_LEVELS[levelIndex + 1]
-
   return (
-    <LevelOneScreen
-      key={level.id}
-      gameplaySoundsEnabled={gameplaySoundsEnabled}
-      level={level}
-      masterVolume={masterVolume}
-      musicEnabled={musicEnabled}
-      onComplete={handleComplete}
-      onExit={() => router.push(PANEL_PATHS.levels)}
-      onGameplaySoundsEnabledChange={setGameplaySoundsEnabled}
-      onMusicEnabledChange={setMusicEnabled}
-      onNextLevel={
-        nextLevel
-          ? () => router.push(getLevelPath(nextLevel.id))
-          : undefined
-      }
-      performance={performanceSettings}
-      pointerYoke={pointerYokeEnabled}
-    />
+    <>
+      <LevelOneScreen
+        key={level.id}
+        gameplaySoundsEnabled={gameplaySoundsEnabled}
+        level={level}
+        masterVolume={masterVolume}
+        musicEnabled={musicEnabled}
+        onComplete={handleComplete}
+        onExit={() => router.push(PANEL_PATHS.levels)}
+        onGameplaySoundsEnabledChange={setGameplaySoundsEnabled}
+        onMusicEnabledChange={setMusicEnabled}
+        onNextLevel={
+          nextLevel && nextLevelUnlocked
+            ? () => router.push(getLevelPath(nextLevel.id))
+            : undefined
+        }
+        performance={performanceSettings}
+        pointerYoke={pointerYokeEnabled}
+      />
+      {pendingPilotScore !== null ? (
+        <PilotProfileGate
+          level={level}
+          mode="postflight"
+          onSkip={handleSkipPilotSave}
+          onSubmit={handlePilotSubmit}
+          score={pendingPilotScore}
+          submitting={profileSaving}
+        />
+      ) : null}
+    </>
   )
 }

@@ -45,7 +45,7 @@ No map service, runtime CDN, or external gameplay art/audio asset is required.
 | C | Switch cockpit / chase camera |
 | R | Reset flight |
 | P / Escape | Pause / resume |
-| X | Hide the in-flight controls helper |
+| X | Toggle the in-flight controls helper |
 | L | Complete the active level (cheat) |
 
 Choose a level from **Start Game**. Fly through every ring in order. After the
@@ -53,10 +53,9 @@ final checkpoint, follow the runway guidance, touch down gently inside the
 marked landing zone, and slow to complete the level. A hard impact or obstacle
 collision crashes the aircraft; reset to retry cleanly.
 
-The first level opened on a device asks for a username and email. The pilot is
-saved in local storage and is not requested again. On startup and after every
-completed level, the client synchronizes the pilot and best scores through the
-Next.js API to Cloudflare R2.
+After a completed level, the game can ask for a username and email to save that
+run. Skipping leaves the result unsaved. Saved pilots are stored in local storage
+and synchronized with best scores through the Next.js API to Cloudflare R2.
 
 Coins are optional exploration rewards worth 25 points each. While genuinely
 airborne, the aircraft also earns one point every three seconds. Airtime pauses
