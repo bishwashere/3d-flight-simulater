@@ -79,8 +79,7 @@ const CONTROL_KEY_CODES = new Set([
   'KeyQ',
   'KeyS',
   'KeyW',
-  'ShiftLeft',
-  'ShiftRight',
+  'Space',
 ])
 
 function deriveHeldControls(heldCodes: ReadonlySet<string>): HeldControls {
@@ -92,7 +91,7 @@ function deriveHeldControls(heldCodes: ReadonlySet<string>): HeldControls {
     rollRight: heldCodes.has('KeyD') || heldCodes.has('ArrowRight'),
     throttleDown:
       heldCodes.has('ControlLeft') || heldCodes.has('ControlRight'),
-    throttleUp: heldCodes.has('ShiftLeft') || heldCodes.has('ShiftRight'),
+    throttleUp: heldCodes.has('Space'),
     yawLeft: heldCodes.has('KeyQ'),
     yawRight: heldCodes.has('KeyE'),
   }
@@ -193,10 +192,6 @@ export function LevelOneScreen({
         hotkey: 'C',
       },
       {
-        callback: () => runtimeRef.current?.startEngine(),
-        hotkey: 'I',
-      },
-      {
         callback: () => runtimeRef.current?.togglePaused(),
         hotkey: 'P',
       },
@@ -293,14 +288,6 @@ export function LevelOneScreen({
         event.defaultPrevented ||
         isInteractiveKeyboardTarget(event.target)
       ) {
-        return
-      }
-
-      if (event.code === 'Space') {
-        event.preventDefault()
-        if (!event.repeat) {
-          runtimeRef.current?.togglePaused()
-        }
         return
       }
 
@@ -478,13 +465,6 @@ export function LevelOneScreen({
     }
   }, [])
 
-  const startEngine = () => {
-    runtimeRef.current?.startEngine()
-    if (pointerYoke) {
-      runtimeRef.current?.requestPointerLock()
-    }
-  }
-
   const resume = () => {
     setPausePanel(null)
     runtimeRef.current?.setPaused(false)
@@ -634,26 +614,6 @@ export function LevelOneScreen({
             ) : (
               <VolumeX aria-hidden="true" size={18} />
             )}
-          </button>
-        </div>
-      ) : null}
-
-      {status === 'ready' && gameStatus.phase === 'ready' && !paused ? (
-        <div className="absolute bottom-7 left-1/2 flex -translate-x-1/2 items-center gap-5 rounded-lg border border-hud/35 bg-flight-950/85 px-5 py-4 shadow-hud backdrop-blur">
-          <div>
-            <p className="text-xs font-semibold tracking-[0.18em] text-hud">
-              AIRCRAFT PARKED
-            </p>
-            <p className="mt-1 text-sm text-flight-300">
-              Shift throttle · WASD/arrows pitch/roll · Space pause
-            </p>
-          </div>
-          <button
-            className="whitespace-nowrap rounded-md bg-hud px-5 py-3 text-sm font-bold text-flight-950 hover:bg-hud-bright"
-            onClick={startEngine}
-            type="button"
-          >
-            START ENGINE&nbsp; [I]
           </button>
         </div>
       ) : null}

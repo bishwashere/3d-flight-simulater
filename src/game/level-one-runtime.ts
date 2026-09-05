@@ -170,6 +170,7 @@ export class LevelOneRuntime {
     this.syncAircraftVisual(this.simulation.state, 0)
     this.updateCamera(this.simulation.state, 1 / 60, true)
     this.attachInput()
+    this.startEngine()
     this.emitGameStatus(true)
     this.engine.runRenderLoop(this.renderFrame)
   }
@@ -891,6 +892,7 @@ export class LevelOneRuntime {
     this.world.aircraft.setCrashState(false)
     this.setAircraftVisibility(true)
     this.audio.reset()
+    this.startEngine()
     this.resetCheckpointVisuals()
     this.syncAircraftVisual(this.simulation.state, 0)
     this.updateCamera(this.simulation.state, 1 / 60, true)

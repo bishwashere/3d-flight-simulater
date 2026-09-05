@@ -189,7 +189,7 @@ export class LevelOneCourse {
       ? distance(position, checkpoint.position)
       : 0
 
-    let objective = 'START ENGINE  [I]'
+    let objective = 'READY'
     if (this.phase === 'playing') {
       objective = checkpoint
         ? `CHECKPOINT ${this.checkpointIndex + 1}`

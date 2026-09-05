@@ -119,7 +119,7 @@ export const EMPTY_LEVEL_ONE_TELEMETRY: Readonly<LevelOneTelemetry> = {
   fps: 0,
   heading: 0,
   meshCount: 0,
-  objective: 'Start engine',
+  objective: 'Ready',
   onGround: true,
   phase: 'ready',
   pitch: 0,
