@@ -2,10 +2,15 @@ import { Gamepad2, Play, Settings2 } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
 import type { MenuPanelId } from '../../types/menu'
 import { MenuButton } from '../ui/menu-button'
+import { PilotAccessStrip } from './pilot-access-strip'
 
 interface MainMenuProps {
+  guestModeSelected: boolean
   onHover: () => void
+  onPilotLogin: () => void
+  onPilotSkip: () => void
   onSelect: (panel: MenuPanelId) => void
+  pilotName?: string
 }
 
 const MENU_ITEMS = [
@@ -27,7 +32,14 @@ const MENU_ITEMS = [
   },
 ] as const
 
-export function MainMenu({ onHover, onSelect }: MainMenuProps) {
+export function MainMenu({
+  guestModeSelected,
+  onHover,
+  onPilotLogin,
+  onPilotSkip,
+  onSelect,
+  pilotName,
+}: MainMenuProps) {
   const reduceMotion = useReducedMotion()
 
   return (
@@ -51,6 +63,13 @@ export function MainMenu({ onHover, onSelect }: MainMenuProps) {
           onHover={onHover}
         />
       ))}
+      <PilotAccessStrip
+        guestModeSelected={guestModeSelected}
+        onHover={onHover}
+        onLogin={onPilotLogin}
+        onSkip={onPilotSkip}
+        pilotName={pilotName}
+      />
     </motion.nav>
   )
 }

@@ -53,9 +53,11 @@ final checkpoint, follow the runway guidance, touch down gently inside the
 marked landing zone, and slow to complete the level. A hard impact or obstacle
 collision crashes the aircraft; reset to retry cleanly.
 
-After a completed level, the game can ask for a username and email to save that
-run. Skipping leaves the result unsaved. Saved pilots are stored in local storage
-and synchronized with best scores through the Next.js API to Cloudflare R2.
+Returning pilots can log in from the home screen, or skip and stay in guest
+mode. After a guest completes a level, the game can ask for a username and email
+to save that run. Skipping leaves the result unsaved. Saved pilots are stored in
+local storage and synchronized with best scores through the Next.js API to
+Cloudflare R2.
 
 Coins are optional exploration rewards worth 25 points each. While genuinely
 airborne, the aircraft also earns one point every three seconds. Airtime pauses

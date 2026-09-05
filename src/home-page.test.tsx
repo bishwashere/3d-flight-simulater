@@ -1,8 +1,22 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { useState } from 'react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { HomeScreenView } from './components/home/home-screen'
-import { useProgressionStore, useSettingsStore } from './state'
+import type { PilotRecord } from './lib/pilot-profile'
+import {
+  usePilotProfileStore,
+  useProgressionStore,
+  useSettingsStore,
+} from './state'
+
+const loadPilotRecord = vi.hoisted(() =>
+  vi.fn(async (): Promise<PilotRecord | null> => null),
+)
+
+vi.mock('./lib/pilot-api', () => ({
+  isPilotStorageUnconfigured: () => false,
+  loadPilotRecord,
+}))
 
 function renderLauncher(initialPath = '/') {
   function Launcher() {
@@ -21,6 +35,12 @@ function renderLauncher(initialPath = '/') {
 describe('home menu', () => {
   beforeEach(() => {
     localStorage.clear()
+    loadPilotRecord.mockClear()
+    usePilotProfileStore.setState({
+      hasHydrated: true,
+      hasLoadedRemote: true,
+      record: null,
+    })
     useProgressionStore.getState().resetProgression()
     useSettingsStore.getState().resetSettings()
   })
@@ -37,6 +57,51 @@ describe('home menu', () => {
     expect(
       screen.getByRole('button', { name: /start game/i }),
     ).toBeEnabled()
+    expect(screen.getByText('Returning pilot?')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Log in' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Skip' })).toBeEnabled()
+  })
+
+  it('keeps the player as a guest after skipping pilot login', () => {
+    renderLauncher()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }))
+
+    expect(screen.getByText('Guest mode')).toBeInTheDocument()
+    expect(screen.queryByText('Returning pilot?')).not.toBeInTheDocument()
+    expect(usePilotProfileStore.getState().record).toBeNull()
+  })
+
+  it('loads a returning pilot from the home screen', async () => {
+    loadPilotRecord.mockResolvedValueOnce({
+      email: 'pilot@example.com',
+      levels: [{ id: 1, passed: true, score: 1775 }],
+      username: 'Sky Pilot',
+    })
+    renderLauncher()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Log in' }))
+    fireEvent.change(screen.getByLabelText('Email'), {
+      target: { value: ' PILOT@example.com ' },
+    })
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: 'Pilot login' })).getByRole(
+        'button',
+        { name: /log in/i },
+      ),
+    )
+
+    expect(await screen.findByText('Pilot loaded')).toBeInTheDocument()
+    expect(screen.getByText('Sky Pilot')).toBeInTheDocument()
+    expect(usePilotProfileStore.getState().record).toMatchObject({
+      email: 'pilot@example.com',
+      username: 'Sky Pilot',
+    })
+    expect(useProgressionStore.getState()).toMatchObject({
+      bestScores: { 'level-1': 1775 },
+      completedLevelIds: ['level-1'],
+      unlockedLevelIds: ['level-1', 'level-2'],
+    })
   })
 
   it('opens level selection with only level one unlocked', () => {
