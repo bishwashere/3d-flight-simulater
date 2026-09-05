@@ -37,14 +37,14 @@ No map service, runtime CDN, or external gameplay art/audio asset is required.
 
 | Input | Action |
 | --- | --- |
-| Space / Ctrl | Increase / decrease throttle |
+| Space / Ctrl | Increase / decrease power |
 | W / S or ↑ / ↓ | Pitch control |
 | A / D or ← / → | Roll control |
 | Q / E | Yaw / rudder control |
 | B | Hold brakes |
 | C | Switch cockpit / chase camera |
 | R | Reset flight |
-| P / Escape | Pause / resume |
+| Enter / P / Escape | Pause / resume |
 | X | Toggle the in-flight controls helper |
 | L | Complete the active level (cheat) |
 

@@ -51,7 +51,11 @@ export interface LevelOneRuntimeOptions {
 }
 
 const DEG_PER_RADIAN = 180 / Math.PI
-const IDLE_DESCENT_PITCH_INPUT = -0.18
+const IDLE_DESCENT_PITCH_INPUT = -0.065
+const LOW_POWER_SINK_REMINDER_SECONDS = 2.6
+const LOW_POWER_SINK_REMINDER_DURATION_SECONDS = 3.2
+const LOW_POWER_SINK_THROTTLE_MAX = 0.72
+const LOW_POWER_SINK_VERTICAL_SPEED = -1.35
 const UNBOOSTED_CLIMB_MAX_METERS = 36
 const UNBOOSTED_CLIMB_MIN_METERS = 5
 const UNBOOSTED_CLIMB_SPEED_MAX = 72
@@ -100,6 +104,8 @@ export class LevelOneRuntime {
   private crashCameraPosition: Vector3 | null = null
   private crashCameraTarget: Vector3 | null = null
   private crashFocus: Vector3 | null = null
+  private lowPowerSinkSeconds = 0
+  private powerReminderUntilSeconds = 0
   private unboostedClimbBaseAltitude: number | null = null
   private readonly world: LevelOneWorld
   private webGpuDevice?: GPUDevice
@@ -300,6 +306,7 @@ export class LevelOneRuntime {
     this.processCourse(deltaSeconds)
     this.processCoinCollection()
     this.processCrash()
+    this.updatePowerReminder(deltaSeconds)
 
     const renderState = this.simulation.getInterpolatedState(interpolationAlpha)
     this.syncAircraftVisual(renderState, deltaSeconds)
@@ -345,7 +352,7 @@ export class LevelOneRuntime {
 
     if (this.controlInput.throttleUp) {
       this.unboostedClimbBaseAltitude = null
-      return hasFlightControlInput ? requestedPitch : IDLE_DESCENT_PITCH_INPUT
+      return requestedPitch
     }
 
     const altitude = this.getAircraftAltitude(state)
@@ -385,6 +392,29 @@ export class LevelOneRuntime {
     }
 
     return clamp(pitch, -1, 1)
+  }
+
+  private updatePowerReminder(deltaSeconds: number): void {
+    const state = this.simulation.state
+    const sinkingWithoutPower =
+      !state.onGround &&
+      !state.stalled &&
+      !this.controlInput.throttleUp &&
+      state.throttle <= LOW_POWER_SINK_THROTTLE_MAX &&
+      state.verticalSpeed <= LOW_POWER_SINK_VERTICAL_SPEED &&
+      this.getAircraftAltitude(state) > 5
+
+    if (!sinkingWithoutPower) {
+      this.lowPowerSinkSeconds = 0
+      return
+    }
+
+    this.lowPowerSinkSeconds += deltaSeconds
+    if (this.lowPowerSinkSeconds >= LOW_POWER_SINK_REMINDER_SECONDS) {
+      this.powerReminderUntilSeconds =
+        state.elapsedSeconds + LOW_POWER_SINK_REMINDER_DURATION_SECONDS
+      this.lowPowerSinkSeconds = 0
+    }
   }
 
   private checkWorldCollisions(): void {
@@ -722,6 +752,7 @@ export class LevelOneRuntime {
       phase: course.phase,
       pitch: -euler.x * DEG_PER_RADIAN,
       pointerLocked: this.engine.isPointerLock,
+      powerReminder: state.elapsedSeconds < this.powerReminderUntilSeconds,
       renderScale: this.currentPixelRatio / this.basePixelRatio,
       roll: -euler.z * DEG_PER_RADIAN,
       score: course.score,
@@ -862,6 +893,8 @@ export class LevelOneRuntime {
       this.crashCameraPosition = null
       this.crashCameraTarget = null
       this.crashFocus = null
+      this.lowPowerSinkSeconds = 0
+      this.powerReminderUntilSeconds = 0
       this.unboostedClimbBaseAltitude = null
       this.cameraMode = 'chase'
       this.world.clearCrashEffects()
@@ -885,6 +918,8 @@ export class LevelOneRuntime {
     this.crashCameraPosition = null
     this.crashCameraTarget = null
     this.crashFocus = null
+    this.lowPowerSinkSeconds = 0
+    this.powerReminderUntilSeconds = 0
     this.unboostedClimbBaseAltitude = null
     this.cameraMode = 'chase'
     this.world.clearCrashEffects()

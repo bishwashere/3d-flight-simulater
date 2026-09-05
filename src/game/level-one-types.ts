@@ -64,6 +64,7 @@ export interface LevelOneTelemetry {
   phase: LevelOneGamePhase
   pitch: number
   pointerLocked: boolean
+  powerReminder: boolean
   renderScale: number
   roll: number
   score: number
@@ -124,6 +125,7 @@ export const EMPTY_LEVEL_ONE_TELEMETRY: Readonly<LevelOneTelemetry> = {
   phase: 'ready',
   pitch: 0,
   pointerLocked: false,
+  powerReminder: false,
   renderScale: 1,
   roll: 0,
   score: 0,

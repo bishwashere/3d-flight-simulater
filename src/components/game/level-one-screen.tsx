@@ -193,6 +193,10 @@ export function LevelOneScreen({
       },
       {
         callback: () => runtimeRef.current?.togglePaused(),
+        hotkey: 'Enter',
+      },
+      {
+        callback: () => runtimeRef.current?.togglePaused(),
         hotkey: 'P',
       },
       {

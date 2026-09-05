@@ -114,4 +114,19 @@ describe('LevelOneScreen completion flow', () => {
       screen.queryByRole('heading', { name: 'Level 1 cleared' }),
     ).not.toBeInTheDocument()
   })
+
+  it('toggles pause with Enter', async () => {
+    render(
+      <LevelOneScreen
+        level={GAME_LEVELS[0]}
+        onComplete={vi.fn()}
+        onExit={vi.fn()}
+      />,
+    )
+
+    await screen.findByRole('button', { name: 'Pause Level 1' })
+    fireEvent.keyDown(document, { code: 'Enter', key: 'Enter' })
+
+    expect(runtimeMock.runtime.togglePaused).toHaveBeenCalledOnce()
+  })
 })

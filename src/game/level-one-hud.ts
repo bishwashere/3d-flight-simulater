@@ -147,11 +147,10 @@ export function createLevelOneHud(
 
   const controlsLabel = themedText(
     'controls-helper-label',
-    'CONTROLS  //  X HIDE',
+    'CONTROLS  //  X TOGGLE',
     11,
     theme.dim,
   )
-  controlsLabel.left = '17px'
   controlsLabel.left = '20px'
   controlsLabel.top = '-88px'
   controlsLabel.width = '314px'
@@ -277,7 +276,7 @@ export function createLevelOneHud(
     primaryData.text = `SPD  ${telemetry.speed.toFixed(0).padStart(3, '0')} km/h     ALT  ${telemetry.altitude.toFixed(0).padStart(3, '0')} m\nHDG  ${telemetry.heading.toFixed(0).padStart(3, '0')}°          VSI  ${telemetry.verticalSpeed >= 0 ? '+' : ''}${telemetry.verticalSpeed.toFixed(1)} m/s`
     secondaryData.text = `${telemetry.backend.toUpperCase()}  ·  ${telemetry.fps.toFixed(0)} FPS  ·  ${Math.round(telemetry.renderScale * 100)}%`
     controlsText.text =
-      'W / S       [↑] [↓]   PITCH\nA / D       [←] [→]   ROLL\nQ / E                 RUDDER\nSPACE / CTRL          THROTTLE\nP / ESC               PAUSE\nX                     HIDE'
+      'W / S       [↑] [↓]   PITCH\nA / D       [←] [→]   ROLL\nQ / E                 RUDDER\nSPACE / CTRL          POWER\nENTER / ESC           PAUSE\nX                     TOGGLE'
     objectiveText.text = `${telemetry.objective}  ${telemetry.checkpointDistance > 1 ? `// ${telemetry.checkpointDistance.toFixed(0)} m` : ''}`
     statusText.text = `ENGINE   ${telemetry.engineRunning ? 'ON' : 'OFF'}\nTHROTTLE  ${Math.round(telemetry.throttle * 100).toString().padStart(3, '0')}%\nGEAR      DOWN\nDAMAGE    ${Math.round(telemetry.damage).toString().padStart(3, '0')}%`
     progress.text = `SCORE  ${telemetry.score.toString().padStart(4, '0')}     AIR  ${formatFlightTime(telemetry.airborneSeconds)}     COINS  ${telemetry.coinsCollected}/${telemetry.coinCount}     RINGS  ${telemetry.checkpointIndex}/${telemetry.checkpointCount}`
@@ -291,6 +290,9 @@ export function createLevelOneHud(
       warning.color = RED
     } else if (telemetry.stalled) {
       warning.text = 'STALL  //  LOWER NOSE'
+      warning.color = AMBER
+    } else if (telemetry.powerReminder) {
+      warning.text = 'PRESS SPACE  //  TAKE FLIGHT'
       warning.color = AMBER
     } else if (telemetry.speed > 245) {
       warning.text = 'OVERSPEED'

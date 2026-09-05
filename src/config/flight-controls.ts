@@ -15,7 +15,7 @@ export const CONTROL_GROUPS: readonly ControlGroup[] = [
       { key: 'W / S or ↑ / ↓', action: 'Pitch down / up' },
       { key: 'A / D or ← / →', action: 'Roll left / right' },
       { key: 'Q / E', action: 'Rudder left / right' },
-      { key: 'Space / Ctrl', action: 'Increase / decrease throttle' },
+      { key: 'Space / Ctrl', action: 'Increase / decrease power' },
     ],
   },
   {
@@ -29,8 +29,8 @@ export const CONTROL_GROUPS: readonly ControlGroup[] = [
     title: 'View & session',
     bindings: [
       { key: 'C', action: 'Cycle camera' },
-      { key: 'P / Esc', action: 'Pause' },
-      { key: 'X', action: 'Hide controls helper' },
+      { key: 'Enter / P / Esc', action: 'Pause' },
+      { key: 'X', action: 'Toggle controls helper' },
       { key: 'Mouse', action: 'Optional pointer yoke' },
     ],
   },
