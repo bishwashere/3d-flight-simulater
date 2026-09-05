@@ -1,6 +1,5 @@
 import { z } from 'zod'
 
-import { GAME_LEVELS, type GameLevelId } from '../config/game-levels'
 import type { ProgressionData } from '../state/progression-store'
 
 export const pilotIdentitySchema = z.object({
@@ -21,30 +20,44 @@ export const pilotIdentitySchema = z.object({
     ),
 })
 
-const levelNumberSchema = z.union([
-  z.literal(1),
-  z.literal(2),
-  z.literal(3),
-])
-
-const levelScoreSchema = z
+const scoreSchema = z
   .number()
   .finite()
   .nonnegative()
   .transform((score) => Math.min(Number.MAX_SAFE_INTEGER, Math.floor(score)))
 
-export const pilotLevelSchema = z.object({
-  id: levelNumberSchema,
+const flightCountSchema = z
+  .number()
+  .finite()
+  .nonnegative()
+  .transform((count) => Math.min(Number.MAX_SAFE_INTEGER, Math.floor(count)))
+
+const legacyLevelSchema = z.object({
+  id: z.number().int().positive(),
   passed: z.boolean(),
-  score: levelScoreSchema,
+  score: scoreSchema,
 })
 
-export const pilotRecordSchema = pilotIdentitySchema.extend({
-  levels: z.array(pilotLevelSchema).max(GAME_LEVELS.length),
+const rawPilotRecordSchema = pilotIdentitySchema.extend({
+  bestScore: scoreSchema.catch(0),
+  completedFlights: flightCountSchema.catch(0),
+  /** Accepted only to migrate records written by the former level system. */
+  levels: z.array(legacyLevelSchema).catch([]),
 })
+
+export const pilotRecordSchema = rawPilotRecordSchema.transform(
+  ({ bestScore, completedFlights, email, levels, username }) => ({
+    bestScore: Math.max(bestScore, 0, ...levels.map((level) => level.score)),
+    completedFlights: Math.max(
+      completedFlights,
+      levels.filter((level) => level.passed).length,
+    ),
+    email,
+    username,
+  }),
+)
 
 export type PilotIdentity = z.output<typeof pilotIdentitySchema>
-export type PilotLevel = z.output<typeof pilotLevelSchema>
 export type PilotRecord = z.output<typeof pilotRecordSchema>
 
 export const FLIGHT_SIMULATOR_R2_PREFIX = 'flight-simulator'
@@ -56,24 +69,12 @@ export function getPilotObjectKey(email: string): string {
 
 export function createPilotRecord(
   identity: PilotIdentity,
-  progression?: Pick<ProgressionData, 'bestScores' | 'completedLevelIds'>,
+  progression?: Pick<ProgressionData, 'bestScore' | 'completedFlights'>,
 ): PilotRecord {
-  const normalizedIdentity = pilotIdentitySchema.parse(identity)
-  const completedLevels = new Set(progression?.completedLevelIds ?? [])
-  const levels = progression
-    ? GAME_LEVELS.flatMap((level) => {
-        const score = progression.bestScores[level.id]
-        const passed = completedLevels.has(level.id)
-
-        return passed || score > 0
-          ? [{ id: level.number, passed, score } satisfies PilotLevel]
-          : []
-      })
-    : []
-
   return pilotRecordSchema.parse({
-    ...normalizedIdentity,
-    levels,
+    ...pilotIdentitySchema.parse(identity),
+    bestScore: progression?.bestScore ?? 0,
+    completedFlights: progression?.completedFlights ?? 0,
   })
 }
 
@@ -88,24 +89,13 @@ export function mergePilotRecords(
     return incoming
   }
 
-  const levels = new Map<number, PilotLevel>()
-
-  for (const level of [...current.levels, ...incoming.levels]) {
-    const previous = levels.get(level.id)
-    levels.set(level.id, {
-      id: level.id,
-      passed: Boolean(previous?.passed || level.passed),
-      score: Math.max(previous?.score ?? 0, level.score),
-    })
-  }
-
   return pilotRecordSchema.parse({
+    bestScore: Math.max(current.bestScore, incoming.bestScore),
+    completedFlights: Math.max(
+      current.completedFlights,
+      incoming.completedFlights,
+    ),
     email: incoming.email,
-    levels: [...levels.values()].sort((a, b) => a.id - b.id),
     username: incoming.username,
   })
-}
-
-export function getGameLevelId(levelNumber: PilotLevel['id']): GameLevelId {
-  return `level-${levelNumber}`
 }

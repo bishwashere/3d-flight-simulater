@@ -2,8 +2,6 @@ import { Color3 } from '@babylonjs/core/Maths/math.color.js'
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js'
 import type { Scene } from '@babylonjs/core/scene.js'
 
-import type { GameLevelTheme } from '../../config/game-levels'
-
 export interface GeometricWorldMaterials {
   aircraftAccent: StandardMaterial
   aircraftBody: StandardMaterial
@@ -57,29 +55,7 @@ function createMaterial(
 
 export function createGeometricWorldMaterials(
   scene: Scene,
-  theme: GameLevelTheme = 'cyan',
 ): GeometricWorldMaterials {
-  const checkpointTheme = {
-    amber: {
-      active: new Color3(1, 0.7, 0.12),
-      activeEmissive: new Color3(0.66, 0.24, 0.015),
-      pending: new Color3(1, 0.9, 0.48),
-      pendingEmissive: new Color3(0.24, 0.12, 0.01),
-    },
-    cyan: {
-      active: new Color3(0.08, 0.94, 0.94),
-      activeEmissive: new Color3(0.05, 0.62, 0.72),
-      pending: new Color3(1, 0.61, 0.08),
-      pendingEmissive: new Color3(0.2, 0.06, 0.005),
-    },
-    violet: {
-      active: new Color3(0.72, 0.38, 1),
-      activeEmissive: new Color3(0.38, 0.1, 0.68),
-      pending: new Color3(1, 0.48, 0.82),
-      pendingEmissive: new Color3(0.25, 0.035, 0.16),
-    },
-  }[theme]
-
   return {
     aircraftAccent: createMaterial(scene, 'material-aircraft-accent', {
       diffuse: new Color3(0.04, 0.43, 0.68),
@@ -109,8 +85,8 @@ export function createGeometricWorldMaterials(
       specular: new Color3(0.12, 0.14, 0.16),
     }),
     checkpointActive: createMaterial(scene, 'material-checkpoint-active', {
-      diffuse: checkpointTheme.active,
-      emissive: checkpointTheme.activeEmissive,
+      diffuse: new Color3(0.08, 0.94, 0.94),
+      emissive: new Color3(0.05, 0.62, 0.72),
       specular: new Color3(0.6, 1, 1),
     }),
     checkpointCollected: createMaterial(
@@ -124,8 +100,8 @@ export function createGeometricWorldMaterials(
     ),
     checkpointPending: createMaterial(scene, 'material-checkpoint-pending', {
       alpha: 0.68,
-      diffuse: checkpointTheme.pending,
-      emissive: checkpointTheme.pendingEmissive,
+      diffuse: new Color3(1, 0.61, 0.08),
+      emissive: new Color3(0.2, 0.06, 0.005),
     }),
     coinGold: createMaterial(scene, 'material-coin-gold', {
       diffuse: new Color3(1, 0.72, 0.055),

@@ -1,11 +1,11 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import {
+  FLIGHT_PATH,
   getMenuPanelFromPath,
   HOME_PATH,
   PANEL_PATHS,
 } from '../../config/menu-routes'
-import { getLevelPath } from '../../config/game-levels'
 import { useMenuAudio } from '../../hooks/use-menu-audio'
 import { usePilotProfileStore } from '../../state'
 import type { MenuPanelId } from '../../types/menu'
@@ -34,8 +34,13 @@ export function HomeScreenView({
   const hasModalOpen = Boolean(activePanel) || pilotLoginOpen
 
   const openPanel = (panel: MenuPanelId) => {
-    audio.play(panel === 'levels' ? 'confirm' : 'click')
+    audio.play('click')
     navigate(PANEL_PATHS[panel])
+  }
+
+  const startFlight = () => {
+    audio.play('confirm')
+    navigate(FLIGHT_PATH)
   }
 
   const closePanel = () => {
@@ -83,6 +88,7 @@ export function HomeScreenView({
             onPilotLogin={openPilotLogin}
             onPilotSkip={skipPilotLogin}
             onSelect={openPanel}
+            onStartFlight={startFlight}
             pilotName={pilotRecord?.username}
           />
         </div>
@@ -96,7 +102,6 @@ export function HomeScreenView({
         activePanel={activePanel}
         audio={audio}
         onClose={closePanel}
-        onLaunchLevel={(levelId) => navigate(getLevelPath(levelId))}
       />
       <PilotLoginDialog
         onClose={closePilotLogin}

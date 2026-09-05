@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import { HomeScreenView } from './components/home/home-screen'
 import type { PilotRecord } from './lib/pilot-profile'
 import {
@@ -45,7 +46,7 @@ describe('home menu', () => {
     useSettingsStore.getState().resetSettings()
   })
 
-  it('renders the game launcher and its primary actions', () => {
+  it('renders one direct unlimited-flight action and pilot access', () => {
     renderLauncher()
 
     expect(
@@ -55,8 +56,9 @@ describe('home menu', () => {
       screen.getByRole('navigation', { name: 'Main menu' }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /start game/i }),
+      screen.getByRole('button', { name: /start unlimited flight/i }),
     ).toBeEnabled()
+    expect(screen.queryByText(/select level/i)).not.toBeInTheDocument()
     expect(screen.getByText('Returning pilot?')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Log in' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Skip' })).toBeEnabled()
@@ -72,10 +74,11 @@ describe('home menu', () => {
     expect(usePilotProfileStore.getState().record).toBeNull()
   })
 
-  it('loads a returning pilot from the home screen', async () => {
+  it('loads a returning unlimited-flight pilot from the home screen', async () => {
     loadPilotRecord.mockResolvedValueOnce({
+      bestScore: 1_775,
+      completedFlights: 3,
       email: 'pilot@example.com',
-      levels: [{ id: 1, passed: true, score: 1775 }],
       username: 'Sky Pilot',
     })
     renderLauncher()
@@ -98,58 +101,20 @@ describe('home menu', () => {
       username: 'Sky Pilot',
     })
     expect(useProgressionStore.getState()).toMatchObject({
-      bestScores: { 'level-1': 1775 },
-      completedLevelIds: ['level-1'],
-      unlockedLevelIds: ['level-1', 'level-2'],
+      bestScore: 1_775,
+      completedFlights: 3,
     })
   })
 
-  it('opens level selection with only level one unlocked', () => {
+  it('launches the flight immediately without a level selector', () => {
     renderLauncher()
 
-    fireEvent.click(screen.getByRole('button', { name: /start game/i }))
-
-    expect(
-      screen.getByRole('dialog', { name: 'Select level' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: /level 1: first flight/i }),
-    ).toBeEnabled()
-    expect(
-      screen.getByRole('button', { name: /locked level 2: island bend/i }),
-    ).toBeDisabled()
-    expect(
-      screen.getByRole('button', { name: /locked level 3: coastal circuit/i }),
-    ).toBeDisabled()
-  })
-
-  it('navigates to the selected level through its real URL', () => {
-    renderLauncher()
-
-    fireEvent.click(screen.getByRole('button', { name: /start game/i }))
     fireEvent.click(
-      screen.getByRole('button', { name: /level 1: first flight/i }),
+      screen.getByRole('button', { name: /start unlimited flight/i }),
     )
 
-    expect(screen.getByTestId('current-path')).toHaveTextContent(
-      '/game/level-1',
-    )
-  })
-
-  it('shows completion, best score, and the newly unlocked level', () => {
-    useProgressionStore.getState().completeLevel('level-1', 1450)
-    renderLauncher('/play')
-
-    const levelOne = screen.getByRole('button', {
-      name: /level 1: first flight/i,
-    })
-    const levelTwo = screen.getByRole('button', {
-      name: /level 2: island bend/i,
-    })
-
-    expect(within(levelOne).getByText('Complete')).toBeInTheDocument()
-    expect(within(levelOne).getByText('Best 1450')).toBeInTheDocument()
-    expect(levelTwo).toBeEnabled()
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/game')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('updates sound settings and closes panels with Escape', () => {

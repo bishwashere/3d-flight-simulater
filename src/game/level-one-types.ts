@@ -27,7 +27,7 @@ export interface LevelOnePerformanceSettings {
   vegetationDensity?: number
 }
 
-/** Reserved for future local asset packs. Level 1 currently uses only primitives. */
+/** Reserved for future local asset packs. The world currently uses primitives. */
 export interface LevelOneAssets {
   environmentTextureUrl?: string
 }
@@ -48,17 +48,17 @@ export interface LevelOneTelemetry {
   airtimeScore: number
   backend: LevelOneBackend
   cameraMode: LevelOneCameraMode
-  checkpointCount: number
-  checkpointDistance: number
-  checkpointIndex: number
-  coinCount: number
   coinScore: number
   coinsCollected: number
   damage: number
+  distanceScore: number
+  distanceTravelled: number
   engineRunning: boolean
+  explorationScore: number
   fps: number
   heading: number
   meshCount: number
+  nearestRunwayDistance: number
   objective: string
   onGround: boolean
   phase: LevelOneGamePhase
@@ -66,6 +66,7 @@ export interface LevelOneTelemetry {
   pointerLocked: boolean
   powerReminder: boolean
   renderScale: number
+  regionsExplored: number
   roll: number
   score: number
   speed: number
@@ -75,7 +76,11 @@ export interface LevelOneTelemetry {
 }
 
 export interface LevelOneGameStatus {
+  airborneSeconds: number
+  coinsCollected: number
+  distanceTravelled: number
   phase: LevelOneGamePhase
+  regionsExplored: number
   score: number
 }
 
@@ -109,24 +114,25 @@ export const EMPTY_LEVEL_ONE_TELEMETRY: Readonly<LevelOneTelemetry> = {
   airtimeScore: 0,
   backend: 'webgl2',
   cameraMode: 'chase',
-  checkpointCount: 0,
-  checkpointDistance: 0,
-  checkpointIndex: 0,
-  coinCount: 0,
   coinScore: 0,
   coinsCollected: 0,
   damage: 0,
+  distanceScore: 0,
+  distanceTravelled: 0,
   engineRunning: false,
+  explorationScore: 0,
   fps: 0,
   heading: 0,
   meshCount: 0,
-  objective: 'Ready',
+  nearestRunwayDistance: 0,
+  objective: 'Take off and explore',
   onGround: true,
   phase: 'ready',
   pitch: 0,
   pointerLocked: false,
   powerReminder: false,
   renderScale: 1,
+  regionsExplored: 0,
   roll: 0,
   score: 0,
   speed: 0,

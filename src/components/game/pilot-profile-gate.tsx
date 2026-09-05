@@ -1,9 +1,7 @@
-import type { GameLevelDefinition } from '../../config/game-levels'
 import type { PilotIdentity } from '../../lib/pilot-profile'
 import { PilotProfileForm } from './pilot-profile-form'
 
 interface PilotProfileGateProps {
-  level: GameLevelDefinition
   mode?: 'postflight' | 'preflight'
   onSkip?: () => void
   onSubmit: (identity: PilotIdentity) => void
@@ -12,7 +10,6 @@ interface PilotProfileGateProps {
 }
 
 export function PilotProfileGate({
-  level,
   mode = 'preflight',
   onSkip,
   onSubmit,
@@ -29,7 +26,7 @@ export function PilotProfileGate({
         className="relative z-10 w-full max-w-md border-l-2 border-hud bg-flight-900/95 p-7 shadow-panel"
       >
         <p className="text-xs font-bold tracking-[0.2em] text-hud uppercase">
-          Level {level.number} · {level.name}
+          Unlimited flight · Open horizons
         </p>
         <h1
           className="mt-2 text-4xl leading-tight font-semibold"

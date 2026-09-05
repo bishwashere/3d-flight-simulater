@@ -8,7 +8,7 @@ import { AppClientShell } from '../src/components/app/app-client-shell'
 
 // oxlint-disable-next-line react/only-export-components -- Next.js reads metadata from the root layout.
 export const metadata: Metadata = {
-  description: 'A geometric coastal flight simulator.',
+  description: 'An unlimited geometric flight through a procedural archipelago.',
   title: 'Coastal Flight Simulator',
 }
 

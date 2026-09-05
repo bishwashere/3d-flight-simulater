@@ -19,8 +19,9 @@ describe('R2 pilot repository', () => {
       'wander-place-data',
     )
     const record = {
+      bestScore: 0,
+      completedFlights: 0,
       email: 'pilot@example.com',
-      levels: [],
       username: 'Sky Pilot',
     }
 
@@ -43,10 +44,11 @@ describe('R2 pilot repository', () => {
     ).toEqual(record)
   })
 
-  it('updates the existing object while preserving the best score', async () => {
+  it('updates the record while preserving the best unlimited-flight score', async () => {
     const storedRecord = {
+      bestScore: 1_500,
+      completedFlights: 6,
       email: 'pilot@example.com',
-      levels: [{ id: 1, passed: true, score: 1500 }],
       username: 'Stored Pilot',
     }
     const send = vi
@@ -63,24 +65,45 @@ describe('R2 pilot repository', () => {
     )
 
     const result = await repository.upsert({
+      bestScore: 1_000,
+      completedFlights: 8,
       email: 'pilot@example.com',
-      levels: [
-        { id: 1, passed: true, score: 1000 },
-        { id: 2, passed: true, score: 800 },
-      ],
       username: 'Latest Pilot',
     })
 
     expect(result).toEqual({
+      bestScore: 1_500,
+      completedFlights: 8,
       email: 'pilot@example.com',
-      levels: [
-        { id: 1, passed: true, score: 1500 },
-        { id: 2, passed: true, score: 800 },
-      ],
       username: 'Latest Pilot',
     })
     expect((send.mock.calls[1]![0] as PutObjectCommand).input.Body).toBe(
       JSON.stringify(result),
     )
+  })
+
+  it('migrates a stored level record on read', async () => {
+    const send = vi.fn().mockResolvedValueOnce({
+      Body: {
+        transformToString: vi.fn(async () =>
+          JSON.stringify({
+            email: 'pilot@example.com',
+            levels: [{ id: 3, passed: true, score: 2_250 }],
+            username: 'Legacy Pilot',
+          }),
+        ),
+      },
+    })
+    const repository = createPilotRepository(
+      { send } as unknown as PilotObjectClient,
+      'wander-place-data',
+    )
+
+    await expect(repository.get('pilot@example.com')).resolves.toEqual({
+      bestScore: 2_250,
+      completedFlights: 1,
+      email: 'pilot@example.com',
+      username: 'Legacy Pilot',
+    })
   })
 })

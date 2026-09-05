@@ -3,12 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createPilotRecord } from '../../lib/pilot-profile'
 import { usePilotProfileStore, useProgressionStore } from '../../state'
-import { LevelRoute } from './level-route'
+import { FlightRoute } from './level-route'
 
 const navigation = vi.hoisted(() => ({
-  levelId: 'level-1',
   push: vi.fn(),
-  replace: vi.fn(),
 }))
 
 const savePilotRecord = vi.hoisted(() =>
@@ -16,52 +14,38 @@ const savePilotRecord = vi.hoisted(() =>
 )
 
 vi.mock('next/navigation', () => ({
-  useParams: () => ({ levelId: navigation.levelId }),
-  useRouter: () => ({
-    push: navigation.push,
-    replace: navigation.replace,
-  }),
+  useRouter: () => ({ push: navigation.push }),
 }))
 
-vi.mock('../../lib/pilot-api', () => ({ savePilotRecord }))
+vi.mock('../../lib/pilot-api', () => ({
+  isPilotStorageUnconfigured: () => false,
+  savePilotRecord,
+}))
 
 vi.mock('./level-one-screen', () => ({
   LevelOneScreen: ({
-    level,
     onComplete,
-    onNextLevel,
+    onExit,
   }: {
-    level: { name: string; number: number }
     onComplete: (score: number) => void
-    onNextLevel?: () => void
+    onExit: () => void
   }) => (
     <div>
-      <p>
-        Playing Level {level.number}: {level.name}
-      </p>
+      <p>Playing unlimited flight</p>
       <button onClick={() => onComplete(900)} type="button">
-        Complete run
+        Land and stop
       </button>
-      {onNextLevel ? (
-        <button onClick={onNextLevel} type="button">
-          Next level
-        </button>
-      ) : null}
+      <button onClick={onExit} type="button">
+        Exit flight
+      </button>
     </div>
   ),
 }))
 
-function renderLevel(path: string) {
-  navigation.levelId = path.split('/').at(-1) ?? ''
-  return render(<LevelRoute />)
-}
-
-describe('level route', () => {
+describe('unlimited flight route', () => {
   beforeEach(() => {
     localStorage.clear()
-    navigation.levelId = 'level-1'
     navigation.push.mockReset()
-    navigation.replace.mockReset()
     savePilotRecord.mockClear()
     useProgressionStore.getState().resetProgression()
     usePilotProfileStore.setState({
@@ -74,62 +58,43 @@ describe('level route', () => {
     })
   })
 
-  it.each(['/game/level-2', '/game/not-a-level'])(
-    'redirects guarded URL %s to level select',
-    async (path) => {
-      renderLevel(path)
-
-      await waitFor(() => {
-        expect(navigation.replace).toHaveBeenCalledWith('/play')
-      })
-    },
-  )
-
-  it('starts the level without asking for a pilot profile first', () => {
+  it('starts a guest flight without requiring a profile first', () => {
     usePilotProfileStore.setState({ record: null })
-    renderLevel('/game/level-1')
+    render(<FlightRoute />)
 
-    expect(screen.getByText(/Playing Level 1: First Flight/i)).toBeInTheDocument()
+    expect(screen.getByText('Playing unlimited flight')).toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'Identify pilot' }),
     ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('form', { name: 'Pilot profile' }),
-    ).not.toBeInTheDocument()
   })
 
-  it('lets an unidentified pilot skip saving a completed run', () => {
+  it('lets a guest skip saving after landing', () => {
     usePilotProfileStore.setState({ record: null })
-    renderLevel('/game/level-1')
+    render(<FlightRoute />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Complete run' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Land and stop' }))
 
     expect(
       screen.getByRole('heading', { name: 'Save this run?' }),
     ).toBeInTheDocument()
     expect(screen.getByText('Score 900')).toBeInTheDocument()
     expect(useProgressionStore.getState()).toMatchObject({
-      bestScores: { 'level-1': 0 },
-      completedLevelIds: [],
-      unlockedLevelIds: ['level-1'],
+      bestScore: 0,
+      completedFlights: 0,
     })
     expect(savePilotRecord).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Skip saving' }))
-
     expect(
       screen.queryByRole('heading', { name: 'Save this run?' }),
     ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'Next level' }),
-    ).not.toBeInTheDocument()
   })
 
-  it('saves an unidentified pilot after completion when requested', async () => {
+  it('saves a guest flight when the pilot identifies after landing', async () => {
     usePilotProfileStore.setState({ record: null })
-    renderLevel('/game/level-1')
+    render(<FlightRoute />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Complete run' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Land and stop' }))
     fireEvent.change(screen.getByLabelText('Username'), {
       target: { value: 'New Pilot' },
     })
@@ -141,47 +106,42 @@ describe('level route', () => {
     await waitFor(() => {
       expect(savePilotRecord).toHaveBeenCalledWith(
         expect.objectContaining({
+          bestScore: 900,
+          completedFlights: 1,
           email: 'new@example.com',
-          levels: [{ id: 1, passed: true, score: 900 }],
           username: 'New Pilot',
         }),
       )
     })
-
     expect(useProgressionStore.getState()).toMatchObject({
-      bestScores: { 'level-1': 900 },
-      completedLevelIds: ['level-1'],
-      unlockedLevelIds: ['level-1', 'level-2'],
+      bestScore: 900,
+      completedFlights: 1,
     })
-    expect(screen.getByRole('button', { name: 'Next level' })).toBeInTheDocument()
   })
 
-  it('records completion, syncs the score, and continues to the next level', async () => {
-    const view = renderLevel('/game/level-1')
+  it('records and synchronizes a returning pilot personal best', async () => {
+    render(<FlightRoute />)
 
-    expect(screen.getByText(/Playing Level 1: First Flight/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Land and stop' }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Complete run' }))
     expect(useProgressionStore.getState()).toMatchObject({
-      bestScores: { 'level-1': 900 },
-      completedLevelIds: ['level-1'],
-      unlockedLevelIds: ['level-1', 'level-2'],
+      bestScore: 900,
+      completedFlights: 1,
     })
-
     await waitFor(() => {
       expect(savePilotRecord).toHaveBeenCalledWith(
         expect.objectContaining({
+          bestScore: 900,
+          completedFlights: 1,
           email: 'pilot@example.com',
-          levels: [{ id: 1, passed: true, score: 900 }],
         }),
       )
     })
+  })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Next level' }))
-    expect(navigation.push).toHaveBeenCalledWith('/game/level-2')
-
-    navigation.levelId = 'level-2'
-    view.rerender(<LevelRoute />)
-    expect(screen.getByText(/Playing Level 2: Island Bend/i)).toBeInTheDocument()
+  it('returns to the main menu', () => {
+    render(<FlightRoute />)
+    fireEvent.click(screen.getByRole('button', { name: 'Exit flight' }))
+    expect(navigation.push).toHaveBeenCalledWith('/')
   })
 })

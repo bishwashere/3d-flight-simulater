@@ -32,7 +32,7 @@ const WEBGPU_ENGINE_OPTIONS = {
   antialias: false,
 }
 
-/** Prefers WebGPU, but keeps Level 1 available on every WebGL2 desktop. */
+/** Prefers WebGPU, with a WebGL2 fallback for wider desktop support. */
 export async function createLevelOneEngine(
   canvas: HTMLCanvasElement,
   options: LevelOneEngineOptions = {},
@@ -60,7 +60,7 @@ export async function createLevelOneEngine(
   })
 
   if (!webGl2) {
-    throw new Error('Level 1 requires WebGPU or WebGL2 support.')
+    throw new Error('Flight mode requires WebGPU or WebGL2 support.')
   }
 
   return {

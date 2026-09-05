@@ -1,14 +1,11 @@
-import { createPilotRecord, getGameLevelId, type PilotRecord } from './pilot-profile'
+import { createPilotRecord, type PilotRecord } from './pilot-profile'
 import { useProgressionStore } from '../state/progression-store'
 
 export function applyPilotProgress(record: PilotRecord): void {
-  const completeLevel = useProgressionStore.getState().completeLevel
-
-  for (const level of [...record.levels].sort((a, b) => a.id - b.id)) {
-    if (level.passed) {
-      completeLevel(getGameLevelId(level.id), level.score)
-    }
-  }
+  useProgressionStore.getState().importProgress({
+    bestScore: record.bestScore,
+    completedFlights: record.completedFlights,
+  })
 }
 
 export function createCurrentPilotRecord(record: PilotRecord): PilotRecord {

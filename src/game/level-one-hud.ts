@@ -7,7 +7,6 @@ import { Control } from '@babylonjs/gui/2D/controls/control.js'
 import { Rectangle } from '@babylonjs/gui/2D/controls/rectangle.js'
 import { TextBlock } from '@babylonjs/gui/2D/controls/textBlock.js'
 
-import type { GameLevelDefinition, GameLevelTheme } from '../config/game-levels'
 import type { LevelOneTelemetry } from './level-one-types'
 
 export interface LevelOneHud {
@@ -20,24 +19,10 @@ export interface LevelOneHud {
 const AMBER = '#ffc66d'
 const RED = '#ff665f'
 
-const HUD_THEMES: Readonly<
-  Record<GameLevelTheme, { border: string; dim: string; primary: string }>
-> = {
-  amber: {
-    border: '#f1b95866',
-    dim: '#d9ad67',
-    primary: '#ffd37a',
-  },
-  cyan: {
-    border: '#67dacc66',
-    dim: '#6fd3c5',
-    primary: '#8fffe7',
-  },
-  violet: {
-    border: '#bb86ee66',
-    dim: '#b994d7',
-    primary: '#d8afff',
-  },
+const HUD_THEME = {
+  border: '#67dacc66',
+  dim: '#6fd3c5',
+  primary: '#8fffe7',
 }
 
 function formatFlightTime(totalSeconds: number): string {
@@ -85,9 +70,8 @@ function createHudPanel(
 export function createLevelOneHud(
   scene: Scene,
   initialTelemetry: LevelOneTelemetry,
-  level: GameLevelDefinition,
 ): LevelOneHud {
-  const theme = HUD_THEMES[level.theme]
+  const theme = HUD_THEME
   const themedText = (
     name: string,
     text: string,
@@ -114,7 +98,7 @@ export function createLevelOneHud(
 
   const levelLabel = themedText(
     'level-label',
-    `LEVEL ${level.number}  //  ${level.name.toUpperCase()}`,
+    'UNLIMITED FLIGHT  //  OPEN HORIZONS',
     13,
   )
   levelLabel.left = '17px'
@@ -263,7 +247,7 @@ export function createLevelOneHud(
   cameraLabel.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_RIGHT
   texture.addControl(cameraLabel)
 
-  const progress = themedText('checkpoint-progress', '', 15)
+  const progress = themedText('flight-progress', '', 15)
   progress.width = '680px'
   progress.height = '28px'
   progress.left = '28px'
@@ -276,10 +260,10 @@ export function createLevelOneHud(
     primaryData.text = `SPD  ${telemetry.speed.toFixed(0).padStart(3, '0')} km/h     ALT  ${telemetry.altitude.toFixed(0).padStart(3, '0')} m\nHDG  ${telemetry.heading.toFixed(0).padStart(3, '0')}°          VSI  ${telemetry.verticalSpeed >= 0 ? '+' : ''}${telemetry.verticalSpeed.toFixed(1)} m/s`
     secondaryData.text = `${telemetry.backend.toUpperCase()}  ·  ${telemetry.fps.toFixed(0)} FPS  ·  ${Math.round(telemetry.renderScale * 100)}%`
     controlsText.text =
-      'W / S       [↑] [↓]   PITCH\nA / D       [←] [→]   ROLL\nQ / E                 RUDDER\nSPACE / CTRL          POWER\nENTER / ESC           PAUSE\nX                     TOGGLE'
-    objectiveText.text = `${telemetry.objective}  ${telemetry.checkpointDistance > 1 ? `// ${telemetry.checkpointDistance.toFixed(0)} m` : ''}`
+      'W / S       [↑] [↓]   PITCH\nA / D       [←] [→]   ROLL\nQ / E                 RUDDER\nSPACE / CTRL          POWER\nB                     BRAKE / BANK\nENTER / ESC           PAUSE\nX                     TOGGLE'
+    objectiveText.text = `${telemetry.objective}${telemetry.phase === 'playing' ? `  //  RUNWAY ${telemetry.nearestRunwayDistance.toFixed(0)} m` : ''}`
     statusText.text = `ENGINE   ${telemetry.engineRunning ? 'ON' : 'OFF'}\nTHROTTLE  ${Math.round(telemetry.throttle * 100).toString().padStart(3, '0')}%\nGEAR      DOWN\nDAMAGE    ${Math.round(telemetry.damage).toString().padStart(3, '0')}%`
-    progress.text = `SCORE  ${telemetry.score.toString().padStart(4, '0')}     AIR  ${formatFlightTime(telemetry.airborneSeconds)}     COINS  ${telemetry.coinsCollected}/${telemetry.coinCount}     RINGS  ${telemetry.checkpointIndex}/${telemetry.checkpointCount}`
+    progress.text = `SCORE  ${telemetry.score.toString().padStart(4, '0')}     AIR  ${formatFlightTime(telemetry.airborneSeconds)}     DIST  ${(telemetry.distanceTravelled / 1_000).toFixed(1)} km     REGIONS  ${telemetry.regionsExplored}     COINS  ${telemetry.coinsCollected}`
     cameraLabel.text = `${telemetry.cameraMode.toUpperCase()} CAM  //  C TO SWITCH`
 
     horizon.rotation = (-telemetry.roll * Math.PI) / 180
@@ -298,7 +282,7 @@ export function createLevelOneHud(
       warning.text = 'OVERSPEED'
       warning.color = AMBER
     } else if (telemetry.phase === 'complete') {
-      warning.text = 'LEVEL COMPLETE'
+      warning.text = 'FLIGHT COMPLETE  //  SCORE BANKED'
       warning.color = theme.primary
     } else {
       warning.text = ''

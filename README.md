@@ -1,31 +1,28 @@
 # Coastal Flight Simulator
 
 Desktop-first geometric flight game built with Next.js, React, TypeScript,
-Tailwind CSS, Zustand, and Babylon.js. Start on the runway, fly through each
-level's ordered checkpoint rings, and return for a safe landing.
+Tailwind CSS, Zustand, and Babylon.js. Start on the runway, explore a continuously
+generated archipelago in any direction, then land and stop when you want to bank
+your accumulated score.
 
-## Levels
+## Unlimited flight
 
-- **Level 1 — First Flight:** three straight gates for takeoff and landing
-- **Level 2 — Island Bend:** six gates with a gentle climbing turn
-- **Level 3 — Coastal Circuit:** nine gates, sharper turns, and a tower gate
-
-Only Level 1 starts unlocked. Completing a safe landing unlocks the next level;
-completion and best scores are saved locally. The same geometric island is used
-throughout, with cyan, amber, and violet HUD/checkpoint themes distinguishing the
-three routes.
+There are no levels, locked routes, or final checkpoint. Deterministic island
+regions, mountains, collectible trails, and usable airstrips stream in around the
+aircraft and unload behind it, keeping active geometry bounded as the world grows.
+Every direction is available from the first takeoff.
 
 ## Gameplay
 
-- Procedural island, airport, runway, hills, water, obstacles, and aircraft made
-  from Babylon.js primitives
+- Streamed procedural islands, airstrips, hills, water, collectibles, and an
+  aircraft made from Babylon.js primitives
 - Fixed-step 120 Hz aircraft simulation, independent from React rendering
 - Ground roll, throttle, lift, drag, stalls, steering, braking, and crash checks
 - Cockpit and chase cameras
-- Optional collectible coins, slow airborne-time scoring, ordered checkpoint
-  rewards, landing validation, crash reset, and level completion
-- Babylon GUI flight HUD with live aircraft and course telemetry
-- Procedural engine, wind, checkpoint, crash/fire, and success audio generated
+- One accumulating score for airborne time, distance, newly explored regions,
+  coins, and the final landing
+- Babylon GUI flight HUD with live aircraft, exploration, and runway telemetry
+- Procedural engine, wind, discovery, crash/fire, and success audio generated
   with the Web Audio API
 - WebGPU when supported, with automatic WebGL2 fallback
 - Low, Medium, and High performance presets persisted with Zustand and validated
@@ -46,22 +43,23 @@ No map service, runtime CDN, or external gameplay art/audio asset is required.
 | R | Reset flight |
 | Enter / P / Escape | Pause / resume |
 | X | Toggle the in-flight controls helper |
-| L | Complete the active level (cheat) |
 
-Choose a level from **Start Game**. Fly through every ring in order. After the
-final checkpoint, follow the runway guidance, touch down gently inside the
-marked landing zone, and slow to complete the level. A hard impact or obstacle
-collision crashes the aircraft; reset to retry cleanly.
+Choose **Start Unlimited Flight** and fly wherever you like. The HUD reports the
+nearest generated runway. To finish, touch down gently on any runway, reduce
+throttle, and hold **B** until the aircraft stops. The result screen then shows
+the complete accumulated score, distance, air time, regions, and coins. A hard
+impact or obstacle collision crashes the aircraft; reset to retry cleanly.
 
 Returning pilots can log in from the home screen, or skip and stay in guest
-mode. After a guest completes a level, the game can ask for a username and email
+mode. After a guest completes a flight, the game can ask for a username and email
 to save that run. Skipping leaves the result unsaved. Saved pilots are stored in
-local storage and synchronized with best scores through the Next.js API to
+local storage and synchronized with their personal best through the Next.js API to
 Cloudflare R2.
 
-Coins are optional exploration rewards worth 25 points each. While genuinely
-airborne, the aircraft also earns one point every three seconds. Airtime pauses
-on the ground, while paused, and after a crash; resetting clears the full score.
+Coins are optional exploration rewards worth 25–75 points. Travel and newly
+visited regions add exploration points, while genuine air time adds one point
+every three seconds. Scoring pauses on the ground, while paused, and after a
+crash; resetting clears the current flight.
 
 ## Local setup
 
@@ -101,7 +99,8 @@ prefix. Pilot records use
 {
   "email": "pilot@example.com",
   "username": "Sky Pilot",
-  "levels": [{ "id": 1, "score": 1050, "passed": true }]
+  "bestScore": 1050,
+  "completedFlights": 3
 }
 ```
 
@@ -110,14 +109,15 @@ updates it. R2 credentials never enter the browser bundle. Without R2 variables,
 the game still remembers the pilot and scores locally while the API returns a
 clear `503` configuration response. This MVP intentionally has no account
 authentication or email uniqueness check; the same normalized email updates the
-same object and preserves the highest score per level.
+same object and preserves the highest unlimited-flight score. Records from the
+former level format are migrated automatically when read.
 
 ## Architecture
 
 ```text
 app/
 ├── (menu)/                       # Client-only menu pages and URL panels
-├── game/[levelId]/               # Client-only Babylon route (SSR disabled)
+├── game/                         # Client-only Babylon route (SSR disabled)
 └── api/player/route.ts           # Server-only R2 GET/PUT handler
 src/
 ├── audio/                         # Menu ambience and reusable UI sounds
@@ -125,11 +125,11 @@ src/
 ├── game/
 │   ├── flight/
 │   │   └── aircraft-simulation.ts # Pure fixed-step aircraft simulation
-│   ├── world/                     # Geometric world, aircraft, and crash VFX
+│   ├── world/                     # Streamed regions, aircraft, and crash VFX
 │   ├── create-level-one-engine.ts # WebGPU/WebGL2 engine selection
 │   ├── create-level-one-scene.ts  # Babylon scene composition
 │   ├── level-one-audio.ts         # Procedural Web Audio soundscape
-│   ├── level-one-course.ts        # Checkpoints, score, and landing rules
+│   ├── level-one-course.ts        # Exploration score and landing rules
 │   ├── level-one-hud.ts           # Babylon GUI instruments and guidance
 │   └── level-one-runtime.ts       # 120 Hz loop, cameras, state, and telemetry
 ├── hooks/                         # React adapters and pilot synchronization
