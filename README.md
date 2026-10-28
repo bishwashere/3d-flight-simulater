@@ -85,7 +85,9 @@ npm run build
 
 Open <http://localhost:6969>.
 
-## Cloudflare R2
+## Cloudflare R2 (optional, for pilot data storage)
+
+This is optional. Without these credentials the game still runs: pilot profiles stay in local storage, cloud sync is disabled, and returning pilot login reports itself unavailable.
 
 This project reuses the Wanderer app's `wander-place-data` R2 bucket. Copy the
 same Object Read & Write credentials into this project's `.env.local`:
