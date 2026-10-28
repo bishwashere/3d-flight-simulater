@@ -1,5 +1,11 @@
 # Coastal Flight Simulator
 
+A flight game you play in the browser: take off and fly along an endless, procedurally generated coastline, from the cockpit or from a chase camera, with working instruments and a scoring system. There is nothing to install.
+
+The front end is a Next.js web app using Babylon.js for the 3D world; the flight simulation runs at a fixed 120 steps per second so flying feels smooth and consistent. The technical details follow below.
+
+# Coastal Flight Simulator
+
 Desktop-first geometric flight game built with Next.js, React, TypeScript,
 Tailwind CSS, Zustand, and Babylon.js. Start on the runway, explore a continuously
 generated archipelago in any direction, then land and stop when you want to bank
